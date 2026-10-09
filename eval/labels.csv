@@ -1,0 +1,4 @@
+clip,quality,dup_group,event,night,notes
+example_001.mp4,good,1,person,0,delivery driver
+example_002.mp4,good,1,person,0,same visit 20s later
+example_003.mp4,bad,2,none,1,blurry IR nothing moving
