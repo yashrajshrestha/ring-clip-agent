@@ -17,6 +17,13 @@ def test_blur_score_drops_when_blurred():
     assert checks.blur_score(sharp) > checks.blur_score(soft) * 5
 
 
+def test_blur_score_ignores_overlay_bands():
+    rng = np.random.default_rng(2)
+    soft = cv2.GaussianBlur(rng.integers(0, 255, (360, 640, 3), dtype=np.uint8), (21, 21), 0)
+    assert checks.blur_score(checks.inner(soft)) < checks.BLUR_MIN
+    assert checks.blur_score(checks.mask_overlays(soft)) > checks.BLUR_MIN
+
+
 def test_dark_frame_flagged():
     assert checks.exposure(_flat(5))["mean"] < checks.DARK_MAX_MEAN
 

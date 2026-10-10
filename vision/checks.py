@@ -14,7 +14,8 @@ import numpy as np
 # Thresholds start as guesses; tune them on the 100 labelled Ring clips.
 BLUR_MIN = 60.0          # Laplacian variance below this = blurry
 DARK_MAX_MEAN = 40.0     # mean gray below this = too dark
-IR_SAT_MAX = 12.0        # mean HSV saturation below this = IR grayscale
+IR_SAT_MAX = 30          # HSV saturation above this counts as a coloured pixel
+IR_COLOUR_SHARE = 0.02   # fewer coloured pixels than this = IR grayscale
 MOTION_MIN_AREA = 0.004  # motion blob smaller than this share of frame = noise
 DUP_HASH_DIST = 10       # Hamming distance on 64-bit pHash; lower = same scene
 OVERLAY_BAND = 0.06      # share of height at top/bottom masked for timestamp/logo
@@ -50,6 +51,14 @@ def mask_overlays(frame: np.ndarray, extra_boxes: list[tuple[int, int, int, int]
     return out
 
 
+def inner(frame: np.ndarray) -> np.ndarray:
+    """Frame without the timestamp/logo bands. Use for edge-based scores, where
+    blacked-out bands would add hard edges of their own."""
+    h = frame.shape[0]
+    band = int(h * OVERLAY_BAND)
+    return frame[band:h - band]
+
+
 def undistort(frame: np.ndarray, strength: float = 0.25) -> np.ndarray:
     """Approximate wide-angle correction without a calibration run.
     `strength` is k1 in a simple radial model; calibrate per camera if time allows."""
@@ -79,12 +88,22 @@ def exposure(frame: np.ndarray) -> dict:
     }
 
 
-def is_ir(frame: np.ndarray) -> bool:
-    """Night IR frames come back as 3 identical channels, so saturation ~0."""
+def is_ir(frame: np.ndarray, mask: np.ndarray | None = None) -> bool:
+    """Night IR frames come back as 3 identical channels, so saturation ~0.
+    `mask` limits the check to background pixels, so a colourful jacket
+    walking through a dull scene does not read as a mode switch."""
     if frame.ndim != 3:
         return True
-    s = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 1]
-    return float(s.mean()) < IR_SAT_MAX
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    # Share of clearly coloured pixels, not mean saturation: one coloured box
+    # on a gray porch must not flip the mode. Dark pixels are skipped because
+    # compression noise gives them high saturation.
+    valid = hsv[:, :, 2] > 40
+    if mask is not None:
+        valid &= mask
+    if not valid.any():
+        return True
+    return float((hsv[:, :, 1][valid] > IR_SAT_MAX).mean()) < IR_COLOUR_SHARE
 
 
 def motion_region(frames: list[np.ndarray]) -> dict:
@@ -159,7 +178,7 @@ def analyze(path: str | Path, undistort_frames: bool = True) -> ClipFacts:
         frames = [undistort(f) for f in frames]
     mid = frames[len(frames) // 2]
     exp = exposure(mid)
-    blur = blur_score(mask_overlays(mid))
+    blur = blur_score(inner(mid))
     ir = is_ir(mid)
     motion = motion_region(frames)
     hashes = [phash(frames[i]) for i in (0, len(frames) // 2, len(frames) - 1)]

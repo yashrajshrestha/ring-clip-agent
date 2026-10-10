@@ -1,0 +1,25 @@
+# docker compose run --rm sample   -> writes clips/sample_porch.mp4
+# docker compose run --rm worker   -> clips/ -> web/public/samples/ (mp4 + timeline JSON)
+x-vision: &vision
+  image: ring-clip-agent/vision:local
+  build:
+    context: .
+    dockerfile: vision/Dockerfile
+  user: "${UID:-1000}:${GID:-1000}"
+
+services:
+  worker:
+    <<: *vision
+    entrypoint: ["python", "-m", "vision.timeline"]
+    command: ["/clips", "/out"]
+    volumes:
+      - ./clips:/clips:ro
+      - ./web/public/samples:/out
+
+  sample:
+    <<: *vision
+    profiles: ["tools"]
+    entrypoint: ["python", "-m", "vision.sample"]
+    command: ["/clips/sample_porch.mp4"]
+    volumes:
+      - ./clips:/clips
