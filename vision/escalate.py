@@ -25,13 +25,25 @@ ESCALATE_BELOW = float(os.environ.get("ESCALATE_BELOW", 0.4))   # decider confid
 TIMEOUT_S = float(os.environ.get("VISION_TIMEOUT", 600))         # a 3B vision model on CPU is slow
 JPEG_QUALITY = 85
 
+# The picture comes first and the context stays thin on purpose: a small
+# vision model given "detector saw nothing" will repeat it instead of looking.
 PROMPT = (
-    "You are a doorbell camera assistant. This is one frame from the camera, brightened for you. "
-    "Context from the video analysis: {state}\n"
-    "Decide what the doorbell should do for the home owner. Choose exactly one action:\n"
+    "You are a doorbell camera assistant looking at one frame from the camera, brightened for you. "
+    "When: {state}\n"
+    "Step 1: look carefully and say in one sentence what is at the door: any person (how many, what they "
+    "are doing), any package, animal or vehicle, or nothing.\n"
+    "Step 2: choose exactly one action for the home owner:\n"
     + "\n".join(f"- {k}: {v}" for k, v in decider.CRITERIA.items())
-    + '\nReply with JSON only: {{"action": "<alert|ignore|recheck|log>", "reason": "<one short sentence saying what you see>"}}'
+    + '\nReply with JSON only: {{"seen": "<step 1 sentence>", "action": "<alert|ignore|recheck|log>"}}'
 )
+
+
+def context(ev: dict, earlier: list[dict]) -> str:
+    """Event timing and what came before, without the detector's verdicts."""
+    lines = [decider._describe({**ev, "label": None, "peak_area": None})]
+    if earlier:
+        lines.append("Earlier in this clip: " + "; ".join(decider._describe(e) for e in earlier[-3:]))
+    return ". ".join(lines) + "."
 
 
 def should_escalate(decision: dict, threshold: float = ESCALATE_BELOW) -> bool:
@@ -70,7 +82,7 @@ def parse_answer(text: str) -> dict | None:
     action = ans.get("action") if isinstance(ans, dict) else None
     if action not in decider.CRITERIA:
         return None
-    reason = str(ans.get("reason") or decider.REASONS[action]).strip()[:200]
+    reason = str(ans.get("seen") or ans.get("reason") or decider.REASONS[action]).strip()[:200]
     return {"action": action, "reason": reason}
 
 
@@ -85,7 +97,7 @@ def escalate(video: str | Path, ev: dict, earlier: list[dict], model: str | None
     jpeg = frame_jpeg(video, ev)
     if jpeg is None:
         return None
-    prompt = PROMPT.format(state=decider.state_text(ev, earlier))
+    prompt = PROMPT.format(state=context(ev, earlier))
     try:
         text = ask_ollama(prompt, jpeg, model, url)
     except (urllib.error.URLError, TimeoutError, OSError, KeyError, ValueError):

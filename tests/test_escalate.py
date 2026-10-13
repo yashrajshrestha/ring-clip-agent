@@ -26,7 +26,7 @@ def clip(tmp_path):
 
 @pytest.fixture
 def fake_ollama():
-    seen, reply = [], {"text": json.dumps({"action": "alert", "reason": "A child in a costume is at the door."})}
+    seen, reply = [], {"text": json.dumps({"seen": "A child in a costume is at the door.", "action": "alert"})}
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
@@ -61,7 +61,8 @@ def test_sends_one_enhanced_jpeg_with_the_four_choices(clip, fake_ollama):
     assert path == "/api/chat" and body["model"] == "fake-vl" and body["format"] == "json"
     msg = body["messages"][0]
     assert all(k in msg["content"] for k in decider.CRITERIA)
-    assert "Rechecked after enhancing" in msg["content"]
+    assert "Step 1" in msg["content"] and "dark at 0.5s" in msg["content"]
+    assert "nothing recognised" not in msg["content"]  # no detector verdict for the model to parrot
     jpeg = base64.b64decode(msg["images"][0])
     assert jpeg[:2] == b"\xff\xd8"  # JPEG magic
     img = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
