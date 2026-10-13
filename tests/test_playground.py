@@ -121,6 +121,23 @@ def test_event_sends_pipeline_request_and_returns_rule(app):
     assert _post(base + "/api/event", {"clip": "porch", "id": 9})[0] == 404
 
 
+def test_video_is_served_with_range_support(app, tmp_path):
+    base, _ = app
+    (tmp_path / "porch.mp4").write_bytes(bytes(range(100)))
+    status, body = _get(base + "/samples/porch.mp4")
+    assert status == 200 and body == bytes(range(100))
+    req = urllib.request.Request(base + "/samples/porch.mp4", headers={"Range": "bytes=10-19"})
+    with urllib.request.urlopen(req, timeout=5) as r:
+        assert r.status == 206 and r.headers["content-range"] == "bytes 10-19/100"
+        assert r.read() == bytes(range(10, 20))
+    for bad in ("/samples/missing.mp4", "/samples/porch.timeline.json", "/samples/..%2Fporch.mp4"):
+        try:
+            urllib.request.urlopen(base + bad, timeout=5)
+            assert False, bad
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+
+
 def test_unreachable_decider_is_a_502(tmp_path):
     srv, base = _serve(playground.make_handler("http://127.0.0.1:9", tmp_path))
     try:

@@ -17,6 +17,7 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import unquote
 
 from . import decider
 from .timeline import _decide
@@ -79,6 +80,36 @@ def make_handler(url: str, samples: Path):
         def _body(self) -> dict:
             return json.loads(self.rfile.read(int(self.headers.get("content-length", 0))) or b"{}")
 
+        def _send_video(self, path: Path) -> None:
+            """Serve an mp4 with Range support, so <video> can seek."""
+            size = path.stat().st_size
+            start, end, status = 0, size - 1, 200
+            rng = self.headers.get("Range", "")
+            if rng.startswith("bytes="):
+                a, _, b = rng[6:].partition("-")
+                start = int(a) if a else max(0, size - int(b))
+                end = min(int(b), size - 1) if (a and b) else end
+                status = 206
+            length = end - start + 1
+            self.send_response(status)
+            self.send_header("content-type", "video/mp4")
+            self.send_header("accept-ranges", "bytes")
+            self.send_header("content-length", str(length))
+            if status == 206:
+                self.send_header("content-range", f"bytes {start}-{end}/{size}")
+            self.end_headers()
+            try:
+                with open(path, "rb") as f:
+                    f.seek(start)
+                    while length > 0:
+                        chunk = f.read(min(1 << 16, length))
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        length -= len(chunk)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # the player seeked and dropped this request
+
         def do_GET(self):
             if self.path == "/":
                 self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
@@ -86,6 +117,12 @@ def make_handler(url: str, samples: Path):
                 self._send(200, health(url))
             elif self.path == "/api/events":
                 self._send(200, [{k: v for k, v in e.items() if k != "request"} for e in events])
+            elif self.path.startswith("/samples/"):
+                name = unquote(self.path[len("/samples/"):])
+                video = samples / name
+                if "/" in name or not name.endswith(".mp4") or not video.is_file():
+                    return self._send(404, {"error": "no such clip"})
+                self._send_video(video)
             else:
                 self._send(404, {"error": "not found"})
 

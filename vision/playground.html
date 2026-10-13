@@ -58,7 +58,8 @@ textarea { min-height: 96px; resize: vertical; }
 details { margin-top: 12px; }
 summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; font-size: 12px; max-height: 320px; }
-.events { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; max-height: 560px; overflow: auto; }
+#video { display: block; width: 100%; margin-top: 10px; border-radius: 8px; background: #000; aspect-ratio: 16 / 9; }
+.events { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; max-height: 360px; overflow: auto; }
 .events li { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; cursor: pointer; }
 .events li:hover, .events li.sel { border-color: var(--info); }
 .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
@@ -121,6 +122,7 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
     <div class="card">
       <h2>Real events from your analysed clips</h2>
       <select id="clip"></select>
+      <video id="video" controls playsinline muted preload="metadata"></video>
       <ul class="events" id="evlist"></ul>
     </div>
     <div class="card" id="evout">
@@ -274,6 +276,8 @@ let EVENTS = [];
 function fmt(t) { return `${Number(t).toFixed(1)}s`; }
 function renderEvents() {
   const clip = $("clip").value;
+  const v = $("video");
+  if (v.dataset.clip !== clip) { v.dataset.clip = clip; v.src = `/samples/${encodeURIComponent(clip)}.mp4`; }
   $("evlist").innerHTML = EVENTS.filter((e) => e.clip === clip).map((e) => `
     <li data-id="${e.id}"><div class="row" style="justify-content:space-between">
       <span>${esc(e.say || e.type)} ${e.label ? `<span class="muted">(${esc(e.label)})</span>` : ""}</span>
@@ -284,6 +288,8 @@ function renderEvents() {
 }
 async function runEvent(clip, id, li) {
   $("evlist").querySelectorAll("li").forEach((x) => x.classList.toggle("sel", x === li));
+  const ev = EVENTS.find((e) => e.clip === clip && e.id === id);
+  if (ev) { const v = $("video"); v.currentTime = Math.max(0, ev.t_start - 0.5); v.play().catch(() => {}); }
   waiting($("evout"), "Decider vs rules");
   const { ok, data } = await post("/api/event", { clip, id });
   clearInterval(timer);
