@@ -1,13 +1,12 @@
-"""DeciderGate tests with the decider stubbed out, so they run without
-Ollama or the model."""
-import asyncio
+"""Decider-first agent tests with the decider stubbed out, so they run
+without Ollama or the model."""
 from types import SimpleNamespace
 
 import pytest
 
 pytest.importorskip("strands")
 
-from strands.interventions import Deny, Guide, Proceed  # noqa: E402
+from strands.interventions import Deny, Proceed  # noqa: E402
 
 from vision import agent, decider  # noqa: E402
 
@@ -15,52 +14,53 @@ PERSON = {"id": 0, "type": "motion", "t_start": 1.0, "t_end": 4.0, "peak_area": 
 DARK = {"id": 1, "type": "dark", "t_start": 5.0, "t_end": 9.0, "peak_area": 0.0}
 
 
-def _call(gate, name="notify_owner"):
-    return asyncio.run(gate.before_tool_call(SimpleNamespace(tool_use={"name": name, "input": {}})))
+def _decision(action, source=decider.SOURCE, confidence=0.9):
+    return {"action": action, "reason": decider.REASONS[action], "source": source, "confidence": confidence}
 
 
-def _decision(action, confidence=0.9):
-    return {"action": action, "reason": decider.REASONS[action], "source": decider.SOURCE,
-            "confidence": confidence}
+class NoModel:
+    """Fails the test if the agent ever tries to use it."""
+
+    def __getattr__(self, name):
+        pytest.fail(f"language model used: {name}")
 
 
-@pytest.mark.parametrize("action, kind, text", [
-    ("alert", Proceed, None),
-    ("ignore", Deny, "Do not notify"),
-    ("recheck", Guide, "recheck_camera"),
-    ("log", Guide, "log_event"),
-])
-def test_each_decision_maps_to_an_intervention(monkeypatch, action, kind, text):
-    monkeypatch.setattr(decider, "decide", lambda ev, earlier, url=None: _decision(action))
-    gate = agent.DeciderGate("http://decider")
-    gate.event = PERSON
-    out = _call(gate)
-    assert isinstance(out, kind)
-    if text:
-        assert text in (out.reason if kind is Deny else out.feedback)
-    assert gate.decisions == [_decision(action)]
+def test_stored_decider_decision_is_used_without_a_call(monkeypatch):
+    monkeypatch.setattr(decider, "decide", lambda *a, **k: pytest.fail("decider called"))
+    ev = {**PERSON, "decision": _decision("alert")}
+    assert agent.decide_event(ev, []) == ev["decision"]
+    ev = {**PERSON, "decision": {"action": "alert", "reason": "r", "source": "vision-llm:x", "confidence": None}}
+    assert agent.decide_event(ev, [])["source"] == "vision-llm:x"
 
 
-def test_other_tools_pass_without_asking(monkeypatch):
-    monkeypatch.setattr(decider, "decide", lambda *a, **k: pytest.fail("decider asked"))
-    gate = agent.DeciderGate("http://decider")
-    gate.event = PERSON
-    assert isinstance(_call(gate, "log_event"), Proceed) and gate.decisions == []
-
-
-def test_retried_notify_reuses_the_answer(monkeypatch):
-    calls = []
-    monkeypatch.setattr(decider, "decide", lambda ev, earlier, url=None: calls.append(ev) or _decision("ignore"))
-    gate = agent.DeciderGate("http://decider")
-    gate.event = PERSON
-    _call(gate), _call(gate)
-    assert len(calls) == 1 and len(gate.decisions) == 1
-
-
-def test_rule_stub_decides_when_decider_is_off(monkeypatch):
+def test_rule_stub_decision_is_replaced_by_a_live_decider_or_the_rules(monkeypatch):
+    ev = {**PERSON, "decision": {"action": "ignore", "reason": "r", "source": "rule-stub"}}
+    monkeypatch.setattr(decider, "decide", lambda e, earlier, url=None: _decision("alert", confidence=0.7))
+    assert agent.decide_event(ev, [], "http://decider")["confidence"] == 0.7
     monkeypatch.setattr(decider, "decide", lambda *a, **k: None)
-    gate = agent.DeciderGate(None)
-    gate.event = DARK
-    out = _call(gate)
-    assert isinstance(out, Guide) and "recheck_camera" in out.feedback
-    assert gate.decisions[0]["source"] == "rule-stub"
+    out = agent.decide_event(ev, [])
+    assert out["source"] == "rule-stub" and out["action"] == "alert"
+
+
+@pytest.mark.parametrize("action, tool", [("ignore", None), ("log", "log_event"), ("recheck", "recheck_camera")])
+def test_non_alert_events_never_wake_the_model(monkeypatch, action, tool):
+    monkeypatch.setattr(decider, "decide", lambda e, earlier, url=None: _decision(action))
+    rows = list(agent.run_clip([DARK], NoModel(), agent.PolicyGuard()))
+    assert len(rows) == 1 and rows[0]["model_ran"] is False and rows[0]["model_ms"] == 0
+    assert [t["tool"] for t in rows[0]["tools"]] == ([tool] if tool else [])
+
+
+def _call(guard, name="notify_owner"):
+    return guard.before_tool_call(SimpleNamespace(tool_use={"name": name, "input": {}}))
+
+
+def test_guard_lets_notify_through_only_on_alert():
+    guard = agent.PolicyGuard()
+    guard.decision = _decision("alert")
+    assert isinstance(_call(guard), Proceed)
+    for action in ("ignore", "log", "recheck"):
+        guard.decision = _decision(action)
+        out = _call(guard)
+        assert isinstance(out, Deny) and action in out.reason
+    assert guard.denied == 3
+    assert isinstance(_call(guard, "other_tool"), Proceed)

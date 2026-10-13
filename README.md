@@ -56,15 +56,20 @@ costume. The playground has an "Ask the vision model" button on every event.
 
 ## Strands agent
 
-`vision/agent.py` is a Strands agent that drafts a notification for each event. Before its
-`notify_owner` tool runs, the `DeciderGate` intervention asks Decider 2B what to do:
+`vision/agent.py` is a Strands agent that writes the notification for each event, decider first:
+the decision is made before any language model runs (the timeline's Decider 2B or vision-model
+decision, else a live Decider 2B call, else the rule stub). Only `alert` wakes the model, whose one
+job is to write the message. `ignore`, `log` and `recheck` never touch it, and a `PolicyGuard`
+intervention denies `notify_owner` on anything but an alert, so a confused model cannot notify.
 
-| Decider | Intervention | Effect |
+| Decision | Language model | Effect |
 |---|---|---|
-| alert | Proceed | notification sent |
-| ignore | Deny | nothing sent |
-| recheck | Guide | agent calls `recheck_camera` instead |
-| log | Guide | agent calls `log_event` instead |
+| alert | runs, writes one sentence | notification sent (guard: Proceed) |
+| ignore | skipped | nothing |
+| log | skipped | note with the decider's reason |
+| recheck | skipped | camera flagged with the decider's hint |
+
+The run prints how many events woke the model, the measured saving the Strands hackathon asks for.
 
 It runs on a local Ollama model for now (Bedrock comes later):
 
