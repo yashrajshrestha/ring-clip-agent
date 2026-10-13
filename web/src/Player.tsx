@@ -235,7 +235,10 @@ export default function Player({ tl, base }: { tl: Timeline; base: string }) {
               )}
               <div className="reason">
                 {ev.decision.reason}
-                <span className="src">{ev.decision.source}</span>
+                <span className="src">
+                  {ev.decision.source}
+                  {ev.decision.confidence != null && ` · ${Math.round(ev.decision.confidence * 100)}% sure`}
+                </span>
               </div>
             </li>
           ))}

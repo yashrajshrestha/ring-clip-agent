@@ -22,6 +22,8 @@ export type Decision = {
   action: "alert" | "ignore" | "recheck" | "log";
   reason: string;
   source: string;
+  confidence?: number;
+  probabilities?: Record<string, number>;
 };
 
 export type ClipEvent = {
