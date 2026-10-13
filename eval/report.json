@@ -1,0 +1,383 @@
+{
+ "summary": {
+  "clips": 18,
+  "events": 132,
+  "alert_events": 108,
+  "alert_hits": 18,
+  "scene_hits": 11,
+  "scene_expected": 18,
+  "night_clips": 4,
+  "night_scene_hits": 3,
+  "night_scene_expected": 4,
+  "alerts_per_clip_median": 5,
+  "alerts_per_clip_max": 16,
+  "quality_events": 0,
+  "rechecks": 0,
+  "rescued": 0,
+  "sources": {
+   "strands-decider-2b": 132
+  }
+ },
+ "clips": [
+  {
+   "name": "amazon_d2yRFg-Xfqs",
+   "kind": "left",
+   "night": false,
+   "duration": 21.5,
+   "events": 13,
+   "alerts": 9,
+   "person_events": 4,
+   "scene_changes": 2,
+   "quality_events": 0,
+   "cuts": 4,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 13
+   },
+   "alert_hit": true,
+   "scene_hit": true,
+   "notes": "Amazon driver; edited with zooms and cuts"
+  },
+  {
+   "name": "amazon__iV2anL2SKE",
+   "kind": "left",
+   "night": false,
+   "duration": 47.9,
+   "events": 11,
+   "alerts": 9,
+   "person_events": 5,
+   "scene_changes": 1,
+   "quality_events": 0,
+   "cuts": 4,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 11
+   },
+   "alert_hit": true,
+   "scene_hit": true,
+   "notes": "Amazon driver; end card from 18.4s"
+  },
+  {
+   "name": "amazon_O_qJFsKEFmQ",
+   "kind": "left",
+   "night": false,
+   "duration": 52.1,
+   "events": 10,
+   "alerts": 8,
+   "person_events": 8,
+   "scene_changes": 1,
+   "quality_events": 0,
+   "cuts": 1,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 10
+   },
+   "alert_hit": true,
+   "scene_hit": true,
+   "notes": "Amazon driver at brick doorway; end card from 46s"
+  },
+  {
+   "name": "amazon_miRKZwhIA70",
+   "kind": "left",
+   "night": false,
+   "duration": 86.5,
+   "events": 17,
+   "alerts": 16,
+   "person_events": 14,
+   "scene_changes": 0,
+   "quality_events": 0,
+   "cuts": 3,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 17
+   },
+   "alert_hit": true,
+   "scene_hit": false,
+   "notes": "compilation of 3 visits; third repeats O_qJFsKEFmQ"
+  },
+  {
+   "name": "delivery_OgmMGQ_OYrY",
+   "kind": "left",
+   "night": true,
+   "duration": 18.3,
+   "events": 1,
+   "alerts": 1,
+   "person_events": 0,
+   "scene_changes": 0,
+   "quality_events": 0,
+   "cuts": 0,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 1
+   },
+   "alert_hit": true,
+   "scene_hit": false,
+   "notes": "late-night delivery"
+  },
+  {
+   "name": "delivery_Xl-R3YCQRkY",
+   "kind": "left",
+   "night": false,
+   "duration": 28.2,
+   "events": 5,
+   "alerts": 4,
+   "person_events": 3,
+   "scene_changes": 0,
+   "quality_events": 0,
+   "cuts": 1,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 5
+   },
+   "alert_hit": true,
+   "scene_hit": false,
+   "notes": "would-be thief drops the package"
+  },
+  {
+   "name": "delivery_H1bjA7jJC4Q",
+   "kind": "left",
+   "night": false,
+   "duration": 11.9,
+   "events": 2,
+   "alerts": 2,
+   "person_events": 1,
+   "scene_changes": 1,
+   "quality_events": 0,
+   "cuts": 0,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 2
+   },
+   "alert_hit": true,
+   "scene_hit": true,
+   "notes": "USPS carrier"
+  },
+  {
+   "name": "delivery_D59d7IwumxI",
+   "kind": "left",
+   "night": false,
+   "duration": 11.9,
+   "events": 2,
+   "alerts": 2,
+   "person_events": 1,
+   "scene_changes": 1,
+   "quality_events": 0,
+   "cuts": 0,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 2
+   },
+   "alert_hit": true,
+   "scene_hit": true,
+   "notes": "Santa costume drop"
+  },
+  {
+   "name": "delivery__xg3SH6qu1c",
+   "kind": "left",
+   "night": false,
+   "duration": 55.8,
+   "events": 21,
+   "alerts": 16,
+   "person_events": 8,
+   "scene_changes": 1,
+   "quality_events": 0,
+   "cuts": 8,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 21
+   },
+   "alert_hit": true,
+   "scene_hit": true,
+   "notes": "pile of packages"
+  },
+  {
+   "name": "delivery_sBnub4-N-lk",
+   "kind": "left",
+   "night": false,
+   "duration": 56.2,
+   "events": 11,
+   "alerts": 11,
+   "person_events": 8,
+   "scene_changes": 0,
+   "quality_events": 0,
+   "cuts": 3,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 11
+   },
+   "alert_hit": true,
+   "scene_hit": false,
+   "notes": "many boxes"
+  },
+  {
+   "name": "theft_7Z4ExUfkUOw",
+   "kind": "taken",
+   "night": false,
+   "duration": 23.6,
+   "events": 4,
+   "alerts": 4,
+   "person_events": 4,
+   "scene_changes": 0,
+   "quality_events": 0,
+   "cuts": 0,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 4
+   },
+   "alert_hit": true,
+   "scene_hit": false,
+   "notes": "two-way talk stops thief"
+  },
+  {
+   "name": "theft_k-WvGk7a9Ms",
+   "kind": "taken",
+   "night": true,
+   "duration": 30.6,
+   "events": 2,
+   "alerts": 1,
+   "person_events": 0,
+   "scene_changes": 1,
+   "quality_events": 0,
+   "cuts": 0,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 2
+   },
+   "alert_hit": true,
+   "scene_hit": true,
+   "notes": "birthday present taken"
+  },
+  {
+   "name": "theft_luvoxnxVBKA",
+   "kind": "taken",
+   "night": true,
+   "duration": 44.2,
+   "events": 5,
+   "alerts": 4,
+   "person_events": 1,
+   "scene_changes": 1,
+   "quality_events": 0,
+   "cuts": 0,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 5
+   },
+   "alert_hit": true,
+   "scene_hit": true,
+   "notes": "medical supplies"
+  },
+  {
+   "name": "theft_QKocOIxfqu8",
+   "kind": "taken",
+   "night": false,
+   "duration": 18.6,
+   "events": 7,
+   "alerts": 6,
+   "person_events": 4,
+   "scene_changes": 0,
+   "quality_events": 0,
+   "cuts": 3,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 7
+   },
+   "alert_hit": true,
+   "scene_hit": false,
+   "notes": "stranger with a walker"
+  },
+  {
+   "name": "theft_2K2sh8xHyIA",
+   "kind": "taken",
+   "night": false,
+   "duration": 21.0,
+   "events": 5,
+   "alerts": 3,
+   "person_events": 1,
+   "scene_changes": 2,
+   "quality_events": 0,
+   "cuts": 1,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 5
+   },
+   "alert_hit": true,
+   "scene_hit": true,
+   "notes": "owner yells to drop it"
+  },
+  {
+   "name": "theft_RM8AxCNwzcQ",
+   "kind": "taken",
+   "night": false,
+   "duration": 54.7,
+   "events": 8,
+   "alerts": 5,
+   "person_events": 2,
+   "scene_changes": 1,
+   "quality_events": 0,
+   "cuts": 1,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 8
+   },
+   "alert_hit": true,
+   "scene_hit": true,
+   "notes": "neighbour taking a package"
+  },
+  {
+   "name": "theft_r1cmcLUahKk",
+   "kind": "taken",
+   "night": false,
+   "duration": 32.7,
+   "events": 5,
+   "alerts": 5,
+   "person_events": 4,
+   "scene_changes": 0,
+   "quality_events": 0,
+   "cuts": 1,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 5
+   },
+   "alert_hit": true,
+   "scene_hit": false,
+   "notes": "stranger stopped while owner away"
+  },
+  {
+   "name": "theft_vS55Kxp-rZQ",
+   "kind": "taken",
+   "night": true,
+   "duration": 16.9,
+   "events": 3,
+   "alerts": 2,
+   "person_events": 1,
+   "scene_changes": 1,
+   "quality_events": 0,
+   "cuts": 0,
+   "rechecks": 0,
+   "rescued": 0,
+   "sources": {
+    "strands-decider-2b": 3
+   },
+   "alert_hit": true,
+   "scene_hit": true,
+   "notes": "neighbour hides packages for safekeeping"
+  }
+ ]
+}
