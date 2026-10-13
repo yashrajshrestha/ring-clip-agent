@@ -137,6 +137,13 @@ def _edited_still(s: int, e: int, stills: list[float], repaints: list[int], fps:
     return after_repaint and float(np.median(stills[s:e + 1])) >= STILL_SHARE
 
 
+def _mostly_inside(run: tuple[int, int], others: list[tuple[int, int]], share: float = 0.5) -> bool:
+    """True when at least `share` of the frames of `run` fall inside `others`."""
+    s, e = run
+    covered = sum(max(0, min(e, oe) - max(s, os_) + 1) for os_, oe in others)
+    return covered / (e - s + 1) >= share
+
+
 def build_timeline(path: str | Path, detector=None) -> dict:
     """`detector` is anything with detect(bgr) -> [{label, group, score, box}],
     normally vision.detector.Detector. None skips object labels."""
@@ -268,11 +275,15 @@ def build_timeline(path: str | Path, detector=None) -> dict:
     for idx, kind in marks:
         events.append({"type": kind, "t_start": frames[idx]["t"], "t_end": frames[idx]["t"], "box": None, "peak_area": 0.0})
     repaints = [idx for idx, _ in marks]
-    for kind, flags in (("blurry", [f["blur"] < BLUR_MIN for f in frames]),
-                        ("dark", [f["bright"] < DARK_MAX_MEAN for f in frames])):
-        for s, e in _runs(flags, QUALITY_RUN):
-            if _edited_still(s, e, stills, repaints, fps):
-                continue
+    dark_runs = [r for r in _runs([f["bright"] < DARK_MAX_MEAN for f in frames], QUALITY_RUN)
+                 if not _edited_still(*r, stills, repaints, fps)]
+    blur_runs = [r for r in _runs([f["blur"] < BLUR_MIN for f in frames], QUALITY_RUN)
+                 if not _edited_still(*r, stills, repaints, fps)]
+    # Darkness flattens every edge, so a dark stretch scores blurry as well:
+    # one problem, one event, and the recheck brightens it once.
+    blur_runs = [r for r in blur_runs if not _mostly_inside(r, dark_runs)]
+    for kind, runs in (("dark", dark_runs), ("blurry", blur_runs)):
+        for s, e in runs:
             events.append({"type": kind, "t_start": frames[s]["t"], "t_end": frames[e]["t"], "box": None, "peak_area": 0.0})
 
     events.sort(key=lambda ev: ev["t_start"])

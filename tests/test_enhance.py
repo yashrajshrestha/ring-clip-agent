@@ -80,6 +80,13 @@ def test_timeline_rechecks_then_decides_again(dim_clip, monkeypatch):
     assert "enhancement" in ev["decision"]["reason"]
 
 
+def test_dark_stretch_is_one_event_not_dark_plus_blurry(dim_clip, monkeypatch):
+    monkeypatch.delenv("DECIDER_URL", raising=False)
+    types = [e["type"] for e in timeline.build_timeline(dim_clip)["events"]]
+    assert types.count("dark") == 1
+    assert "blurry" not in types
+
+
 def test_black_clip_stays_recheck_with_a_light_hint(black_clip, monkeypatch):
     monkeypatch.delenv("DECIDER_URL", raising=False)
     dark = [e for e in timeline.build_timeline(black_clip)["events"] if e["type"] == "dark"]
