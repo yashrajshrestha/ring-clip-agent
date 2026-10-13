@@ -110,6 +110,51 @@ def test_hard_cut_splits_motion_and_is_reported(tmp_path):
     assert not any(e["type"] == "scene_change" for e in events)
 
 
+def _write_quality_clip(path, card_at=None, blur_from=None, frozen=False, seconds=6):
+    """Live gray footage with fresh sensor noise every frame. From `card_at` a
+    flat coloured end card follows a hard cut; from `blur_from` the footage is
+    defocused. `frozen` reuses one noise frame, so nothing flickers."""
+    rng = np.random.default_rng(5)
+    base = np.clip(130 + cv2.GaussianBlur(rng.normal(0, 40, (H, W)), (0, 0), 0.8), 0, 255)
+    still_noise = rng.normal(0, 4, (H, W))
+    w = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), FPS, (W, H))
+    for i in range(FPS * seconds):
+        t = i / FPS
+        if card_at is not None and t >= card_at:
+            w.write(np.full((H, W, 3), (40, 160, 230), np.uint8))
+            continue
+        g = base + (still_noise if frozen else rng.normal(0, 4, (H, W)))
+        if blur_from is not None and t >= blur_from:
+            g = cv2.GaussianBlur(g, (0, 0), 8)
+        g = np.clip(g, 0, 255).astype(np.uint8)
+        w.write(cv2.merge([g, g, g]))
+    w.release()
+
+
+def _types(path):
+    return [e["type"] for e in timeline.build_timeline(path)["events"]]
+
+
+def test_end_card_after_a_cut_is_not_reported_as_blurry(tmp_path):
+    p = tmp_path / "card.mp4"
+    _write_quality_clip(p, card_at=3.0)
+    types = _types(p)
+    assert "blurry" not in types
+    assert {"cut", "day_mode"} & set(types)  # the edit itself is still on the timeline
+
+
+def test_real_blur_on_live_footage_is_reported(tmp_path):
+    p = tmp_path / "blur.mp4"
+    _write_quality_clip(p, blur_from=3.0)
+    assert "blurry" in _types(p)
+
+
+def test_frozen_blur_without_an_edit_is_still_reported(tmp_path):
+    p = tmp_path / "stuck.mp4"
+    _write_quality_clip(p, blur_from=0.0, frozen=True)
+    assert "blurry" in _types(p)
+
+
 def test_browser_copy_is_h264(clip, tmp_path):
     out = tmp_path / "out.mp4"
     timeline.to_browser_mp4(clip, out)

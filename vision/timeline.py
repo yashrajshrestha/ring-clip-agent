@@ -19,7 +19,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from . import decider
 from .checks import BLUR_MIN, DARK_MAX_MEAN, MOTION_MIN_AREA, blur_score, exposure, inner, is_ir, mask_overlays
+from .enhance import recheck
 
 ANALYSIS_WIDTH = 640     # frames are downscaled to this before analysis; boxes are fractions
 WARMUP_FRAMES = 5        # MOG2 needs a few frames before its foreground means anything
@@ -34,6 +36,8 @@ CUT_CELL_DELTA = 30      # a 16x9 cell whose colour moves this much has changed
 CUT_QUAD_SHARE = 0.25    # every quadrant must change this much; measured: edits 0.34+, footage 0.06 max
 DETECT_HZ = 2            # YOLOX runs this many times a second while motion is on screen
 IR_HOLD_S = 5.0         # seconds a day/night reading must hold without a frame jump
+STILL_SHARE = 0.998      # share of pixels unchanged frame to frame = a frozen still; measured: end cards 1.0, night footage 0.99 max
+REPAINT_GAP_S = 0.5      # a quality run starting this soon after a cut or mode switch may be an edit
 PERSON_AREA = 0.03       # rule-stub: peak motion at least this big reads as a person
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".avi"}
 
@@ -62,8 +66,8 @@ def _box(contour, w: int, h: int) -> list[float]:
 
 
 def _decide(event: dict) -> dict:
-    """Placeholder for the Bedrock agent: same output shape, labelled so it is
-    never mistaken for agent output."""
+    """Rule fallback when Strands Decider is off or unreachable: same output
+    shape, labelled so it is never mistaken for model output."""
     kind = event["type"]
     label = event.get("label")
     if kind == "motion" and label == "person":
@@ -81,6 +85,15 @@ def _decide(event: dict) -> dict:
             action, reason = "ignore", "Small or brief motion, likely noise"
     elif kind == "scene_change":
         action, reason = "alert", "Something was left or taken near the door"
+    elif kind in ("blurry", "dark") and event.get("recheck") is not None:
+        rc = event["recheck"]
+        if rc["usable"] and rc["label"] == "person":
+            action, reason = "alert", "Person visible once the picture was enhanced"
+        elif rc["usable"]:
+            action, reason = "log", "Picture usable after enhancement, nothing recognised"
+        else:
+            fix = "add a light" if kind == "dark" else "clean or refocus the lens"
+            action, reason = "recheck", f"Still too {kind} after enhancement, {fix}"
     elif kind in ("blurry", "dark"):
         action, reason = "recheck", f"Image too {kind} to trust, check the camera"
     elif kind == "cut":
@@ -116,6 +129,14 @@ def _runs(flags: list[bool], min_len: int) -> list[tuple[int, int]]:
     return out
 
 
+def _edited_still(s: int, e: int, stills: list[float], repaints: list[int], fps: float) -> bool:
+    """True when frames s..e are an end card or title, not camera footage: the
+    run starts right after a cut or mode switch and the picture is frozen.
+    Night footage can be 99% still, so both conditions must hold."""
+    after_repaint = any(0 <= s - idx <= round(fps * REPAINT_GAP_S) for idx in repaints)
+    return after_repaint and float(np.median(stills[s:e + 1])) >= STILL_SHARE
+
+
 def build_timeline(path: str | Path, detector=None) -> dict:
     """`detector` is anything with detect(bgr) -> [{label, group, score, box}],
     normally vision.detector.Detector. None skips object labels."""
@@ -135,7 +156,8 @@ def build_timeline(path: str | Path, detector=None) -> dict:
     frames: list[dict] = []
     thumbs: list[np.ndarray] = []
     marks: list[tuple[int, str]] = []   # (frame index, night_mode | day_mode | cut)
-    ir_state, run_start, prev_bright, prev_fg = None, None, None, None
+    stills: list[float] = []            # share of pixels unchanged since the previous frame
+    ir_state, run_start, prev_bright, prev_fg, prev_core = None, None, None, None, None
     cell_hist: deque = deque(maxlen=max(1, round(fps / 2)) + 1)
     cut_cooldown = 0
     det_every = max(1, round(fps / DETECT_HZ))
@@ -162,6 +184,11 @@ def build_timeline(path: str | Path, detector=None) -> dict:
         ir_raw = is_ir(small, bg_px)
         gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
         bright = float((gray[bg_px] if bg_px is not None else gray).mean())
+        # Live footage always flickers a little (sensor and compression noise);
+        # an end card or title graphic does not change at all.
+        core = inner(gray).astype(np.int16)
+        stills.append(float((core == prev_core).mean()) if prev_core is not None else 0.0)
+        prev_core = core
 
         # Cut, zoom or dissolve: every quadrant changes against half a second
         # ago. A person at the lens fills one region; an edit replaces them all.
@@ -240,9 +267,12 @@ def build_timeline(path: str | Path, detector=None) -> dict:
     events = _motion_events(frames, thumbs, fps, [0] + [idx for idx, _ in marks])
     for idx, kind in marks:
         events.append({"type": kind, "t_start": frames[idx]["t"], "t_end": frames[idx]["t"], "box": None, "peak_area": 0.0})
+    repaints = [idx for idx, _ in marks]
     for kind, flags in (("blurry", [f["blur"] < BLUR_MIN for f in frames]),
                         ("dark", [f["bright"] < DARK_MAX_MEAN for f in frames])):
         for s, e in _runs(flags, QUALITY_RUN):
+            if _edited_still(s, e, stills, repaints, fps):
+                continue
             events.append({"type": kind, "t_start": frames[s]["t"], "t_end": frames[e]["t"], "box": None, "peak_area": 0.0})
 
     events.sort(key=lambda ev: ev["t_start"])
@@ -253,7 +283,13 @@ def build_timeline(path: str | Path, detector=None) -> dict:
             ev["say"] = SAY_MOTION.get(ev["label"], SAY["motion"])
         else:
             ev["say"] = SAY[ev["type"]]
-        ev["decision"] = _decide(ev)
+        ev["decision"] = decider.decide(ev, events[:n]) or _decide(ev)
+        # Perception-decision-action loop: a recheck improves the picture with
+        # OpenCV and decides again on what the better picture shows.
+        if ev["decision"]["action"] == "recheck" and ev["type"] in ("blurry", "dark"):
+            ev["recheck"] = recheck(path, ev, detector)
+            ev["first_decision"] = ev["decision"]
+            ev["decision"] = decider.decide(ev, events[:n]) or _decide(ev)
 
     return {
         "width": width, "height": height, "fps": round(fps, 3),
