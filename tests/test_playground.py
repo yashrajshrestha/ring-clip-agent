@@ -121,6 +121,22 @@ def test_event_sends_pipeline_request_and_returns_rule(app):
     assert _post(base + "/api/event", {"clip": "porch", "id": 9})[0] == 404
 
 
+def test_escalate_route_uses_the_vision_model_on_the_event(app, tmp_path, monkeypatch):
+    from vision import escalate
+    base, _ = app
+    monkeypatch.delenv("VISION_MODEL", raising=False)
+    assert _post(base + "/api/escalate", {"clip": "porch", "id": 1})[0] == 503
+    monkeypatch.setenv("VISION_MODEL", "fake-vl")
+    calls = []
+    monkeypatch.setattr(escalate, "escalate", lambda video, ev, earlier, model=None, url=None:
+                        calls.append((video.name, ev["id"], len(earlier))) or
+                        {"action": "alert", "reason": "Someone is there.", "source": "vision-llm:fake-vl", "confidence": None})
+    status, out = _post(base + "/api/escalate", {"clip": "porch", "id": 1})
+    assert status == 200 and out["answer"]["action"] == "alert" and out["model"] == "fake-vl"
+    assert calls == [("porch.mp4", 1, 1)]
+    assert _post(base + "/api/escalate", {"clip": "porch", "id": 9})[0] == 404
+
+
 def test_video_is_served_with_range_support(app, tmp_path):
     base, _ = app
     (tmp_path / "porch.mp4").write_bytes(bytes(range(100)))

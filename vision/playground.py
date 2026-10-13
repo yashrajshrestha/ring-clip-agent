@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
-from . import decider
+from . import decider, escalate
 from .timeline import _decide
 
 PAGE = Path(__file__).with_name("playground.html")
@@ -40,8 +40,12 @@ def load_events(samples: Path) -> list[dict]:
                 "t_start": ev["t_start"], "t_end": ev["t_end"], "say": ev.get("say"),
                 "rule": {"action": rule["action"], "reason": rule["reason"]},
                 "request": decider.request(ev, events[:n]),
+                "raw": {"ev": ev, "earlier": events[:n]},
             })
     return out
+
+
+PRIVATE = {"request", "raw"}  # server-side only, never sent in the event list
 
 
 def timed_ask(body: dict, url: str) -> tuple[int, dict]:
@@ -116,7 +120,7 @@ def make_handler(url: str, samples: Path):
             elif self.path == "/api/health":
                 self._send(200, health(url))
             elif self.path == "/api/events":
-                self._send(200, [{k: v for k, v in e.items() if k != "request"} for e in events])
+                self._send(200, [{k: v for k, v in e.items() if k not in PRIVATE} for e in events])
             elif self.path.startswith("/samples/"):
                 name = unquote(self.path[len("/samples/"):])
                 video = samples / name
@@ -139,6 +143,18 @@ def make_handler(url: str, samples: Path):
                     return self._send(404, {"error": "no such event"})
                 status, out = timed_ask(ev["request"], url)
                 self._send(status, {**out, "request": ev["request"], "rule": ev["rule"]})
+            elif self.path == "/api/escalate":
+                ev = by_key.get((body.get("clip"), body.get("id")))
+                if ev is None:
+                    return self._send(404, {"error": "no such event"})
+                model = os.environ.get("VISION_MODEL")
+                if not model:
+                    return self._send(503, {"error": "VISION_MODEL is not set on the playground server"})
+                t0 = time.time()
+                answer = escalate.escalate(samples / f"{ev['clip']}.mp4", ev["raw"]["ev"], ev["raw"]["earlier"])
+                if answer is None:
+                    return self._send(502, {"error": f"{model} gave no usable answer (is Ollama running with it pulled?)"})
+                self._send(200, {"answer": answer, "model": model, "ms": round((time.time() - t0) * 1000)})
             else:
                 self._send(404, {"error": "not found"})
 

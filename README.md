@@ -40,6 +40,20 @@ crops, so a small or distant figure reaches the detector larger.
 
 A truly black frame cannot be rescued; the recheck says so instead of guessing.
 
+## Escalation to a vision model
+
+When Decider 2B answers with confidence under `ESCALATE_BELOW` (default 0.4), one enhanced frame from
+the event goes to a vision language model with the same four choices, and its answer replaces the
+decider's (`vision/escalate.py`). The event keeps `decider_decision` so both are visible. Off unless
+`VISION_MODEL` is set; the provider is Ollama for now, Bedrock later:
+
+    ollama pull qwen2.5vl:3b
+    VISION_MODEL=qwen2.5vl:3b DECIDER_URL=http://127.0.0.1:8000 DECIDER_TIMEOUT=300 \
+      python -m vision.timeline clips/pexels web/public/samples
+
+On the Pexels clips 2 events in 6 escalate: packages left with nobody there, and a child in a dark
+costume. The playground has an "Ask the vision model" button on every event.
+
 ## Strands agent
 
 `vision/agent.py` is a Strands agent that drafts a notification for each event. Before its

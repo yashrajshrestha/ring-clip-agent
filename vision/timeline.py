@@ -19,7 +19,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from . import decider
+from . import decider, escalate
 from .checks import BLUR_MIN, DARK_MAX_MEAN, MOTION_MIN_AREA, blur_score, exposure, inner, is_ir, mask_overlays
 from .enhance import recheck
 
@@ -303,6 +303,13 @@ def build_timeline(path: str | Path, detector=None) -> dict:
             ev["recheck"] = recheck(path, ev, detector)
             ev["first_decision"] = ev["decision"]
             ev["decision"] = decider.decide(ev, events[:n]) or _decide(ev)
+        # Model routing: a low-confidence decider answer sends one enhanced
+        # frame to a vision model, whose answer replaces it.
+        if escalate.should_escalate(ev["decision"]):
+            answer = escalate.escalate(path, ev, events[:n])
+            if answer is not None:
+                ev["decider_decision"] = ev["decision"]
+                ev["decision"] = answer
 
     return {
         "width": width, "height": height, "fps": round(fps, 3),

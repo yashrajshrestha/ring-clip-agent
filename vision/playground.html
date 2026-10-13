@@ -308,7 +308,25 @@ async function runEvent(clip, id, li) {
         : `<p class="error">${esc(data.error || "No answer")}</p>`}</div>
     </div>
     ${ok && ans ? `<p class="verdict ${same ? "same" : "diff"}">${same ? "Same call as the rules." : "Different call from the rules."}</p>${bars(ans.probabilities, ans.choice)}` : ""}
+    <div class="row" style="margin-top:12px"><button class="btn" id="askvl" type="button">Ask the vision model</button>
+      <span class="muted" style="font-size:13px">${ok && ans && ans.confidence < 0.4 ? "Low confidence: the pipeline would escalate this one." : "The pipeline escalates only when confidence is under 40%."}</span></div>
+    <div id="vlout"></div>
     <details><summary>Request and response JSON</summary><pre>${esc(JSON.stringify({ request: data.request, response: data.response ?? data }, null, 2))}</pre></details>`;
+  $("askvl").onclick = async () => {
+    const btn = $("askvl"), out = $("vlout"), t0 = Date.now();
+    btn.disabled = true;
+    out.innerHTML = `<p class="muted">Showing one enhanced frame to the vision model… <b id="vlsec">0</b> s</p>`;
+    const tick = setInterval(() => { const e = $("vlsec"); if (e) e.textContent = Math.round((Date.now() - t0) / 1000); }, 500);
+    const r = await post("/api/escalate", { clip, id });
+    clearInterval(tick);
+    btn.disabled = false;
+    out.innerHTML = r.ok
+      ? `<div class="vs" style="margin-top:8px"><div><div class="muted" style="font-size:13px">${esc(r.data.model)}</div>
+          <div class="answer"><span class="pill ${esc(r.data.answer.action)}">${esc(r.data.answer.action)}</span></div>
+          <div style="font-size:14px;margin-top:4px">${esc(r.data.answer.reason)}</div>
+          <div class="muted" style="font-size:13px;margin-top:4px">${(r.data.ms / 1000).toFixed(1)} s</div></div></div>`
+      : `<p class="error">${esc(r.data.error)}</p>`;
+  };
 }
 
 async function checkHealth() {
