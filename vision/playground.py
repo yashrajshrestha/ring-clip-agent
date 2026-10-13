@@ -1,0 +1,126 @@
+"""Decider playground: ask Strands Decider 2B any typed question, or replay a
+real doorbell event and compare its choice with the rule stub.
+
+    python -m vision.playground [--port 8090] [--samples web/public/samples]
+
+Needs a running `strands-decider serve` at DECIDER_URL (default
+http://127.0.0.1:8000). Standard library only. Calls wait up to
+PLAYGROUND_TIMEOUT seconds (default 600) because a CPU call is slow.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import time
+import urllib.error
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+from . import decider
+from .timeline import _decide
+
+PAGE = Path(__file__).with_name("playground.html")
+TIMEOUT_S = float(os.environ.get("PLAYGROUND_TIMEOUT", 600))
+
+
+def load_events(samples: Path) -> list[dict]:
+    """Every event from the timeline files, with the exact state text the
+    pipeline would send and the rule stub's answer for comparison."""
+    out = []
+    for path in sorted(samples.glob("*.timeline.json")):
+        clip = path.name.removesuffix(".timeline.json")
+        events = json.loads(path.read_text())["events"]
+        for n, ev in enumerate(events):
+            rule = _decide(ev)
+            out.append({
+                "clip": clip, "id": ev["id"], "type": ev["type"], "label": ev.get("label"),
+                "t_start": ev["t_start"], "t_end": ev["t_end"], "say": ev.get("say"),
+                "rule": {"action": rule["action"], "reason": rule["reason"]},
+                "request": decider.request(ev, events[:n]),
+            })
+    return out
+
+
+def timed_ask(body: dict, url: str) -> tuple[int, dict]:
+    """Forward one request; returns (status, payload) and never raises."""
+    t0 = time.time()
+    try:
+        resp = decider.ask(body, url, timeout=TIMEOUT_S)
+        return 200, {"response": resp, "ms": round((time.time() - t0) * 1000)}
+    except urllib.error.HTTPError as e:
+        return e.code, {"error": e.read().decode(errors="replace")[:2000]}
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+        return 502, {"error": f"{type(e).__name__}: {e}"}
+
+
+def health(url: str) -> dict:
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/health", timeout=3) as resp:
+            return {"ok": True, "url": url, **json.load(resp)}
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+        return {"ok": False, "url": url, "error": f"{type(e).__name__}: {e}"}
+
+
+def make_handler(url: str, samples: Path):
+    events = load_events(samples) if samples.is_dir() else []
+    by_key = {(e["clip"], e["id"]): e for e in events}
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, status: int, payload, ctype: str = "application/json") -> None:
+            data = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+            self.send_response(status)
+            self.send_header("content-type", ctype)
+            self.send_header("content-length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def _body(self) -> dict:
+            return json.loads(self.rfile.read(int(self.headers.get("content-length", 0))) or b"{}")
+
+        def do_GET(self):
+            if self.path == "/":
+                self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
+            elif self.path == "/api/health":
+                self._send(200, health(url))
+            elif self.path == "/api/events":
+                self._send(200, [{k: v for k, v in e.items() if k != "request"} for e in events])
+            else:
+                self._send(404, {"error": "not found"})
+
+        def do_POST(self):
+            try:
+                body = self._body()
+            except ValueError:
+                return self._send(400, {"error": "body is not JSON"})
+            if self.path == "/api/ask":
+                self._send(*timed_ask(body, url))
+            elif self.path == "/api/event":
+                ev = by_key.get((body.get("clip"), body.get("id")))
+                if ev is None:
+                    return self._send(404, {"error": "no such event"})
+                status, out = timed_ask(ev["request"], url)
+                self._send(status, {**out, "request": ev["request"], "rule": ev["rule"]})
+            else:
+                self._send(404, {"error": "not found"})
+
+        def log_message(self, *args):
+            pass
+
+    return Handler
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--port", type=int, default=8090)
+    ap.add_argument("--samples", type=Path, default=Path("web/public/samples"))
+    args = ap.parse_args()
+    url = os.environ.get("DECIDER_URL", "http://127.0.0.1:8000")
+    srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(url, args.samples))
+    print(f"playground on http://127.0.0.1:{args.port} (decider {url})")
+    srv.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

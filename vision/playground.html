@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decider Playground</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #fff; --text: #16181d; --muted: #6b7280; --line: #e3e6eb;
+  --alert: #d43c3c; --warn: #c98a0b; --info: #2f6fd6; --ok: #1f9d55;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1115; --panel: #171a21; --text: #e8eaee; --muted: #9099a8; --line: #2a2f3a;
+    --alert: #ef5b5b; --warn: #e0a526; --info: #5b93f0; --ok: #3cc47c;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 40px; }
+header { display: flex; gap: 16px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 15px; margin: 0 0 10px; }
+.sub, .muted { color: var(--muted); }
+.sub { margin: 4px 0 0; }
+.health { font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--alert); }
+.tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.tabs button { font: inherit; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--info); border-color: var(--info); color: #fff; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+textarea, input, select { font: inherit; width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+textarea { min-height: 96px; resize: vertical; }
+.opt { display: grid; grid-template-columns: 130px minmax(0, 1fr) 30px; gap: 6px; margin-bottom: 6px; }
+.opt.level { grid-template-columns: minmax(0, 1fr) 30px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn { font: inherit; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+.btn.primary { background: var(--info); border-color: var(--info); color: #fff; }
+.btn:disabled { opacity: .55; cursor: wait; }
+.btn.x { padding: 4px 0; }
+.answer { font-size: 26px; font-weight: 650; margin: 2px 0; }
+.stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; margin-bottom: 10px; }
+.stats b { font-variant-numeric: tabular-nums; }
+.bars { display: grid; gap: 6px; }
+.barrow { display: grid; grid-template-columns: 110px minmax(0, 1fr) 52px; gap: 8px; align-items: center; font-size: 14px; }
+.barrow span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; }
+.fill { height: 100%; background: var(--muted); }
+.fill.top { background: var(--info); }
+.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.error { color: var(--alert); white-space: pre-wrap; }
+details { margin-top: 12px; }
+summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; font-size: 12px; max-height: 320px; }
+.events { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; max-height: 560px; overflow: auto; }
+.events li { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; cursor: pointer; }
+.events li:hover, .events li.sel { border-color: var(--info); }
+.time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+.pill { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 1px 8px; border-radius: 999px; color: #fff; background: var(--muted); }
+.pill.alert { background: var(--alert); } .pill.recheck { background: var(--warn); } .pill.log { background: var(--info); }
+.vs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+.vs > div { border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.verdict { font-size: 13px; margin-top: 6px; }
+.verdict.same { color: var(--ok); } .verdict.diff { color: var(--warn); }
+.state { background: var(--bg); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Decider Playground</h1>
+      <p class="sub">Ask Strands Decider 2B a typed question and see its choice, probabilities and confidence.</p>
+    </div>
+    <span class="health"><span class="dot" id="dot"></span><span id="health">Checking decider…</span></span>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="ask">Ask anything</button>
+    <button role="tab" aria-selected="false" data-tab="events">Doorbell events</button>
+  </div>
+
+  <section id="tab-ask" class="grid">
+    <div class="card">
+      <div class="row">
+        <label for="preset" style="margin:0">Preset</label>
+        <select id="preset" style="width:auto"></select>
+      </div>
+      <label for="state">State: what the decider knows</label>
+      <textarea id="state"></textarea>
+      <label for="qtype">Question type</label>
+      <select id="qtype">
+        <option value="choice">choice: pick one of several options</option>
+        <option value="noul">noul: yes or no</option>
+        <option value="score">score: rate on an ordered scale</option>
+      </select>
+      <label for="instructions">Question</label>
+      <input id="instructions">
+      <label id="optlabel">Options</label>
+      <div id="opts"></div>
+      <div class="row" style="margin-top:6px">
+        <button class="btn" id="addopt" type="button">Add option</button>
+        <span style="flex:1"></span>
+        <button class="btn primary" id="ask" type="button">Ask the decider</button>
+      </div>
+    </div>
+    <div class="card" id="askout">
+      <h2>Answer</h2>
+      <p class="muted">Results show here. On a laptop CPU a call takes about 10 seconds, and the first one can take over a minute.</p>
+    </div>
+  </section>
+
+  <section id="tab-events" class="grid" hidden>
+    <div class="card">
+      <h2>Real events from your analysed clips</h2>
+      <select id="clip"></select>
+      <ul class="events" id="evlist"></ul>
+    </div>
+    <div class="card" id="evout">
+      <h2>Decider vs rules</h2>
+      <p class="muted">Pick an event. The decider gets the same state text the pipeline sends, including the last 3 events before it.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const PRESETS = {
+  "Doorbell action": {
+    state: "Doorbell camera event: motion at 2.0s, lasting 4.0s, detector saw a person, covering 12% of the frame. Objects detected: person x8.",
+    type: "choice", instructions: "What should the doorbell do about this event for the home owner?",
+    options: [["alert", "Notify the owner now: a person is at the door, or something was left or taken."],
+              ["ignore", "Do nothing: an animal, a passing car, shadows, or tiny brief motion."],
+              ["recheck", "The picture is too blurry or dark to trust; check the camera or look again."],
+              ["log", "Keep a note only: a camera mode change or a cut in the video, nothing at the door."]],
+  },
+  "Is someone at the door?": {
+    state: "Doorbell camera event: motion at 5.2s, lasting 0.4s, covering 1% of the frame. Earlier in this clip: night mode at 0.0s.",
+    type: "noul", instructions: "Is a person standing at the door?",
+    options: [["true", "a visitor, courier or other person is at the door"], ["false", "only noise, an animal, light or a passing car"]],
+  },
+  "Urgency score": {
+    state: "Doorbell camera event: scene change at 41.0s. Earlier in this clip: motion at 30.1s, lasting 9.0s, detector saw a person.",
+    type: "score", instructions: "How urgently should the home owner look at this?",
+    levels: ["not at all", "when convenient", "soon", "right now"],
+  },
+  "Model routing": {
+    state: "User message: what's the capital of France?",
+    type: "choice", instructions: "Which model should answer this request?",
+    options: [["small", "a short factual or simple request a small fast model handles well"],
+              ["frontier", "multi-step reasoning, long documents, code or nuanced writing"]],
+  },
+  "Blank": { state: "", type: "choice", instructions: "", options: [["", ""], ["", ""]] },
+};
+
+function optRow(name = "", desc = "", fixedName = false) {
+  const d = document.createElement("div");
+  d.className = "opt";
+  d.innerHTML = `<input class="oname" placeholder="name" value="${esc(name)}" ${fixedName ? "readonly" : ""}>
+    <input class="odesc" placeholder="what this option means" value="${esc(desc)}">
+    <button class="btn x" type="button" title="Remove" ${fixedName ? "hidden" : ""}>×</button>`;
+  d.querySelector("button").onclick = () => d.remove();
+  return d;
+}
+function levelRow(text = "") {
+  const d = document.createElement("div");
+  d.className = "opt level";
+  d.innerHTML = `<input class="odesc" placeholder="level (lowest first)" value="${esc(text)}"><button class="btn x" type="button" title="Remove">×</button>`;
+  d.querySelector("button").onclick = () => d.remove();
+  return d;
+}
+function renderOpts(type, options, levels) {
+  const box = $("opts");
+  box.innerHTML = "";
+  $("addopt").hidden = type === "noul";
+  if (type === "score") {
+    $("optlabel").textContent = "Levels, lowest first (2 to 10)";
+    (levels || ["low", "high"]).forEach((l) => box.append(levelRow(l)));
+  } else if (type === "noul") {
+    $("optlabel").textContent = "What true and false mean (optional)";
+    const m = Object.fromEntries(options || []);
+    box.append(optRow("true", m.true || ""), optRow("false", m.false || ""));
+    box.querySelectorAll(".oname").forEach((i) => i.readOnly = true);
+    box.querySelectorAll(".btn.x").forEach((b) => b.hidden = true);
+  } else {
+    $("optlabel").textContent = "Options: name and description";
+    (options || [["", ""], ["", ""]]).forEach(([n, d]) => box.append(optRow(n, d)));
+  }
+}
+function loadPreset(name) {
+  const p = PRESETS[name];
+  $("state").value = p.state;
+  $("qtype").value = p.type;
+  $("instructions").value = p.instructions;
+  renderOpts(p.type, p.options, p.levels);
+}
+function buildQuestion() {
+  const type = $("qtype").value;
+  const q = { type, instructions: $("instructions").value.trim() };
+  if (type === "score") {
+    q.criteria = [...document.querySelectorAll("#opts .odesc")].map((i) => i.value.trim()).filter(Boolean);
+  } else {
+    const crit = {};
+    document.querySelectorAll("#opts .opt").forEach((r) => {
+      const n = r.querySelector(".oname").value.trim(), d = r.querySelector(".odesc").value.trim();
+      if (n && (d || type === "choice")) crit[n] = d || n;
+    });
+    if (type === "choice" || Object.keys(crit).length) q.criteria = crit;
+  }
+  return q;
+}
+
+function bars(probs, top) {
+  const rows = Object.entries(probs || {}).sort((a, b) => b[1] - a[1]);
+  return `<div class="bars">${rows.map(([k, v]) => `<div class="barrow"><span title="${esc(k)}">${esc(k)}</span>
+    <div class="track"><div class="fill ${k === top ? "top" : ""}" style="width:${(v * 100).toFixed(1)}%"></div></div>
+    <span class="num">${(v * 100).toFixed(1)}%</span></div>`).join("")}</div>`;
+}
+function answerHtml(ans) {
+  if (!ans) return `<p class="error">No answer in the response.</p>`;
+  if (ans.type === "noul") {
+    const p = ans.noul;
+    return `<div class="answer">${p >= 0.5 ? "Yes" : "No"}</div>
+      <div class="stats"><span>P(true) <b>${(p * 100).toFixed(1)}%</b></span></div>${bars({ true: p, false: 1 - p }, p >= 0.5 ? "true" : "false")}`;
+  }
+  if (ans.type === "score") {
+    const probs = Object.fromEntries(Object.entries(ans.probabilities || {}).map(([i, v]) => [ans.legend?.[i] ?? i, v]));
+    const top = Object.entries(probs).sort((a, b) => b[1] - a[1])[0]?.[0];
+    return `<div class="answer">${Number(ans.score).toFixed(2)} <span class="muted" style="font-size:15px">on 0 to ${Object.keys(ans.legend || {}).length - 1}</span></div>
+      <div class="stats"><span>Confidence <b>${(ans.confidence * 100).toFixed(0)}%</b></span></div>${bars(probs, top)}`;
+  }
+  return `<div class="answer">${esc(ans.choice)}</div>
+    <div class="stats"><span>Confidence <b>${(ans.confidence * 100).toFixed(0)}%</b></span></div>${bars(ans.probabilities, ans.choice)}`;
+}
+
+let timer;
+function waiting(el, what) {
+  const t0 = Date.now();
+  el.innerHTML = `<h2>${what}</h2><p class="muted">Waiting for the decider… <b id="elapsed">0</b> s</p>`;
+  clearInterval(timer);
+  timer = setInterval(() => { const e = $("elapsed"); if (e) e.textContent = Math.round((Date.now() - t0) / 1000); }, 500);
+}
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  return { ok: r.ok, data };
+}
+
+$("ask").onclick = async () => {
+  const body = { state: $("state").value, questions: { answer: buildQuestion() } };
+  const btn = $("ask");
+  btn.disabled = true;
+  waiting($("askout"), "Answer");
+  const { ok, data } = await post("/api/ask", body);
+  clearInterval(timer);
+  btn.disabled = false;
+  $("askout").innerHTML = `<h2>Answer</h2>` + (ok
+    ? `${answerHtml(data.response.answers?.answer)}
+       <p class="muted" style="margin-top:12px">Took ${(data.ms / 1000).toFixed(1)} s round trip · ${data.response.usage?.input_tokens ?? "?"} input tokens</p>`
+    : `<p class="error">${esc(data.error)}</p>`) +
+    `<details><summary>Request and response JSON</summary><pre>${esc(JSON.stringify({ request: body, response: data.response ?? data }, null, 2))}</pre></details>`;
+};
+
+let EVENTS = [];
+function fmt(t) { return `${Number(t).toFixed(1)}s`; }
+function renderEvents() {
+  const clip = $("clip").value;
+  $("evlist").innerHTML = EVENTS.filter((e) => e.clip === clip).map((e) => `
+    <li data-id="${e.id}"><div class="row" style="justify-content:space-between">
+      <span>${esc(e.say || e.type)} ${e.label ? `<span class="muted">(${esc(e.label)})</span>` : ""}</span>
+      <span class="pill ${esc(e.rule.action)}" title="Rule stub">${esc(e.rule.action)}</span></div>
+      <span class="time">${fmt(e.t_start)}${e.t_end > e.t_start ? ` to ${fmt(e.t_end)}` : ""} · ${esc(e.type.replace("_", " "))}</span></li>`).join("")
+    || `<li class="muted">No events in this clip.</li>`;
+  $("evlist").querySelectorAll("li[data-id]").forEach((li) => li.onclick = () => runEvent(clip, Number(li.dataset.id), li));
+}
+async function runEvent(clip, id, li) {
+  $("evlist").querySelectorAll("li").forEach((x) => x.classList.toggle("sel", x === li));
+  waiting($("evout"), "Decider vs rules");
+  const { ok, data } = await post("/api/event", { clip, id });
+  clearInterval(timer);
+  const rule = data.rule || EVENTS.find((e) => e.clip === clip && e.id === id)?.rule;
+  const ans = data.response?.answers?.action;
+  const same = ans && rule && ans.choice === rule.action;
+  $("evout").innerHTML = `<h2>Decider vs rules</h2>
+    <div class="state">${esc(data.request?.state ?? "")}</div>
+    <div class="vs">
+      <div><div class="muted" style="font-size:13px">Rules</div>
+        <div class="answer"><span class="pill ${esc(rule?.action)}">${esc(rule?.action)}</span></div>
+        <div class="muted" style="font-size:13px">${esc(rule?.reason)}</div></div>
+      <div><div class="muted" style="font-size:13px">Strands Decider 2B</div>
+        ${ok && ans ? `<div class="answer"><span class="pill ${esc(ans.choice)}">${esc(ans.choice)}</span></div>
+          <div class="muted" style="font-size:13px">Confidence ${(ans.confidence * 100).toFixed(0)}% · ${(data.ms / 1000).toFixed(1)} s</div>`
+        : `<p class="error">${esc(data.error || "No answer")}</p>`}</div>
+    </div>
+    ${ok && ans ? `<p class="verdict ${same ? "same" : "diff"}">${same ? "Same call as the rules." : "Different call from the rules."}</p>${bars(ans.probabilities, ans.choice)}` : ""}
+    <details><summary>Request and response JSON</summary><pre>${esc(JSON.stringify({ request: data.request, response: data.response ?? data }, null, 2))}</pre></details>`;
+}
+
+async function checkHealth() {
+  try {
+    const h = await (await fetch("/api/health")).json();
+    $("dot").className = "dot " + (h.ok ? "ok" : "bad");
+    $("health").textContent = h.ok ? `Decider ready · ${h.model ?? ""} on ${h.device ?? "?"}` : `Decider not reachable at ${h.url}`;
+  } catch { $("dot").className = "dot bad"; $("health").textContent = "Playground server not reachable"; }
+}
+
+document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", x === b));
+  $("tab-ask").hidden = b.dataset.tab !== "ask";
+  $("tab-events").hidden = b.dataset.tab !== "events";
+});
+$("preset").innerHTML = Object.keys(PRESETS).map((k) => `<option>${esc(k)}</option>`).join("");
+$("preset").onchange = (e) => loadPreset(e.target.value);
+$("qtype").onchange = (e) => renderOpts(e.target.value);
+$("addopt").onclick = () => $("opts").append($("qtype").value === "score" ? levelRow() : optRow());
+loadPreset("Doorbell action");
+checkHealth();
+setInterval(checkHealth, 15000);
+fetch("/api/events").then((r) => r.json()).then((evs) => {
+  EVENTS = evs;
+  const clips = [...new Set(evs.map((e) => e.clip))];
+  $("clip").innerHTML = clips.map((c) => `<option>${esc(c)}</option>`).join("") || `<option>No timelines found</option>`;
+  renderEvents();
+});
+$("clip").onchange = renderEvents;
+</script>
+</body>
+</html>
