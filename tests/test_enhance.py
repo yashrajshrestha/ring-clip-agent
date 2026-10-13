@@ -94,6 +94,48 @@ def test_black_clip_stays_recheck_with_a_light_hint(black_clip, monkeypatch):
     assert "add a light" in dark[0]["decision"]["reason"]
 
 
+class CropOnlyDetector:
+    """Fake detector: sees a person only in a zoomed crop, never in a full frame,
+    like a real one with a figure too small to detect at full size."""
+
+    def __init__(self):
+        self.full, self.crops = 0, 0
+
+    def detect(self, bgr):
+        if bgr.shape[1] < 640:
+            self.crops += 1
+            return [{"label": "person", "group": "person", "score": 0.8, "box": [0.4, 0.2, 0.2, 0.6]}]
+        self.full += 1
+        return []
+
+
+class AlwaysPerson:
+    def detect(self, bgr):
+        return [{"label": "person", "group": "person", "score": 0.9, "box": [0.4, 0.2, 0.2, 0.6]}]
+
+
+def test_second_look_zooms_in_when_the_first_look_sees_nothing(dim_clip):
+    det = CropOnlyDetector()
+    rc = enhance.recheck(dim_clip, {"type": "dark", "t_start": 0.5, "t_end": 3.5}, det)
+    assert rc["objects"] == {} and rc["label"] == "person"
+    sl = rc["second_look"]
+    assert sl["frames"] == enhance.SECOND_LOOK_FRAMES and sl["crops"] == 5
+    assert sl["objects"] == {"person": enhance.SECOND_LOOK_FRAMES}
+    assert det.full == enhance.RECHECK_FRAMES and det.crops == 5 * enhance.SECOND_LOOK_FRAMES
+    assert timeline._decide({"type": "dark", "t_start": 0.5, "t_end": 3.5, "recheck": rc})["action"] == "alert"
+    assert "zoomed in over 12 more frames: detector saw person x12" in decider.state_text({"type": "dark", "t_start": 0.5, "t_end": 3.5, "recheck": rc}, [])
+
+
+def test_no_second_look_when_the_first_look_finds_a_person(dim_clip):
+    rc = enhance.recheck(dim_clip, {"type": "dark", "t_start": 0.5, "t_end": 3.5}, AlwaysPerson())
+    assert rc["label"] == "person" and "second_look" not in rc
+
+
+def test_no_second_look_without_a_detector(dim_clip):
+    rc = enhance.recheck(dim_clip, {"type": "dark", "t_start": 0.5, "t_end": 3.5})
+    assert "second_look" not in rc
+
+
 def test_rule_alerts_when_enhanced_picture_shows_a_person():
     ev = {"type": "dark", "t_start": 1.0, "t_end": 2.0,
           "recheck": {"usable": True, "label": "person", "objects": {"person": 4}}}

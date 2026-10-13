@@ -58,6 +58,10 @@ def state_text(ev: dict, earlier: list[dict]) -> str:
             lines.append(f"Rechecked after enhancing the picture with OpenCV: now usable, detector saw {seen}.")
         else:
             lines.append("Rechecked after enhancing the picture with OpenCV: still too dark or blurry to trust.")
+        if rc.get("second_look"):
+            sl = rc["second_look"]
+            seen = ", ".join(f"{k} x{v}" for k, v in sorted(sl["objects"].items())) or "nothing recognised"
+            lines.append(f"Second look, zoomed in over {sl['frames']} more frames: detector saw {seen}.")
     if earlier:
         lines.append("Earlier in this clip: " + "; ".join(_describe(e) for e in earlier[-3:]) + ".")
     return " ".join(lines)

@@ -29,9 +29,12 @@ OpenCV (gamma, CLAHE, bilateral denoise), measures them again and runs the detec
 picture. The decider then decides a second time on what the better picture shows. The event keeps
 `first_decision`, `recheck` (quality before and after, what was seen) and the final `decision`:
 
+If the first look sees nothing, a second look samples more frames and cuts each into five zoomed
+crops, so a small or distant figure reaches the detector larger.
+
 | Enhanced picture | Decision |
 |---|---|
-| usable, person seen | alert |
+| person seen, first or second look | alert |
 | usable, nothing recognised | log |
 | still too dark or blurry | recheck, with a hint: add a light, or clean the lens |
 

@@ -1,10 +1,12 @@
 """Recheck: when a picture is too dark or blurry, improve it with OpenCV and
 look again before bothering the owner.
 
-Gamma lifts the dark tones, CLAHE restores local contrast, a bilateral filter
-smooths the grain both of those amplify. None of it can invent light that
-never reached the sensor: a truly black frame stays unusable, and the recheck
-says so.
+First look: gamma lifts the dark tones, CLAHE restores local contrast, a
+bilateral filter smooths the grain both of those amplify, and the detector
+runs on the result. Second look, only when the first saw nothing: more frames,
+each cut into five overlapping crops so small or distant figures reach the
+detector larger. None of it can invent light that never reached the sensor: a
+truly black frame stays unusable, and the recheck says so.
 """
 from __future__ import annotations
 
@@ -15,7 +17,9 @@ import numpy as np
 
 from .checks import BLUR_MIN, DARK_MAX_MEAN, blur_score, inner, mask_overlays
 
-RECHECK_FRAMES = 8        # frames sampled across the event window
+RECHECK_FRAMES = 8        # frames sampled across the event window on the first look
+SECOND_LOOK_FRAMES = 12   # more frames on the second look
+ZOOM = 0.6                # crop side as a share of the frame; the detector letterboxes to 640, so a figure shows ~1.7x larger
 TARGET_MEAN = 110.0       # gamma aims the mean gray here; measured day footage sits at 80-130
 GAMMA_MAX = 3.0           # beyond this the frame is noise, not picture
 LABEL_PRIORITY = ("person", "animal", "vehicle")
@@ -36,6 +40,14 @@ def enhance(frame: np.ndarray) -> np.ndarray:
     return cv2.bilateralFilter(out, 5, 40, 40)
 
 
+def zoom_crops(frame: np.ndarray) -> list[np.ndarray]:
+    """Four corner crops and a centre crop, each ZOOM of the frame on a side."""
+    h, w = frame.shape[:2]
+    ch, cw = round(h * ZOOM), round(w * ZOOM)
+    origins = [(0, 0), (0, w - cw), (h - ch, 0), (h - ch, w - cw), ((h - ch) // 2, (w - cw) // 2)]
+    return [frame[y:y + ch, x:x + cw] for y, x in origins]
+
+
 def _measure(frame: np.ndarray) -> dict:
     core = inner(mask_overlays(frame))
     return {"blur": round(blur_score(core), 1),
@@ -44,6 +56,10 @@ def _measure(frame: np.ndarray) -> dict:
 
 def _usable(m: dict) -> bool:
     return m["blur"] >= BLUR_MIN and m["bright"] >= DARK_MAX_MEAN
+
+
+def _label(counts: dict) -> str | None:
+    return next((g for g in LABEL_PRIORITY if counts.get(g)), None)
 
 
 def sample_frames(video: str | Path, t_start: float, t_end: float, n: int = RECHECK_FRAMES,
@@ -60,11 +76,26 @@ def sample_frames(video: str | Path, t_start: float, t_end: float, n: int = RECH
     return out
 
 
+def second_look(video: str | Path, event: dict, detector) -> dict:
+    """More frames, enhanced, each cut into zoomed crops for the detector.
+    A frame counts a group once however many crops show it."""
+    frames = sample_frames(video, event["t_start"], event["t_end"], n=SECOND_LOOK_FRAMES)
+    counts: dict[str, int] = {}
+    for f in frames:
+        seen: set[str] = set()
+        for crop in zoom_crops(enhance(f)):
+            seen |= {o["group"] for o in detector.detect(crop)}
+        for g in seen:
+            counts[g] = counts.get(g, 0) + 1
+    return {"frames": len(frames), "crops": 5, "objects": counts, "label": _label(counts)}
+
+
 def recheck(video: str | Path, event: dict, detector=None) -> dict:
     """Enhance the frames of a blurry/dark event and look again.
 
     Returns what changed: picture quality before and after, whether the
-    enhanced picture is usable, and what the detector saw in it."""
+    enhanced picture is usable, what the detector saw, and, when it saw
+    nothing, what a zoomed second look over more frames found."""
     frames = sample_frames(video, event["t_start"], event["t_end"])
     if not frames:
         return {"frames": 0, "before": None, "after": None, "usable": False, "objects": {}, "label": None}
@@ -79,8 +110,11 @@ def recheck(video: str | Path, event: dict, detector=None) -> dict:
         for f in enhanced:
             for g in {o["group"] for o in detector.detect(f)}:
                 counts[g] = counts.get(g, 0) + 1
-    return {
+    out = {
         "frames": len(frames), "before": before_m, "after": after_m,
-        "usable": _usable(after_m), "objects": counts,
-        "label": next((g for g in LABEL_PRIORITY if counts.get(g)), None),
+        "usable": _usable(after_m), "objects": counts, "label": _label(counts),
     }
+    if detector is not None and out["label"] is None:
+        out["second_look"] = second_look(video, event, detector)
+        out["label"] = out["second_look"]["label"]
+    return out

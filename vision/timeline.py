@@ -87,7 +87,9 @@ def _decide(event: dict) -> dict:
         action, reason = "alert", "Something was left or taken near the door"
     elif kind in ("blurry", "dark") and event.get("recheck") is not None:
         rc = event["recheck"]
-        if rc["usable"] and rc["label"] == "person":
+        if rc["label"] == "person" and rc.get("second_look"):
+            action, reason = "alert", "Person found after zooming in over more frames"
+        elif rc["usable"] and rc["label"] == "person":
             action, reason = "alert", "Person visible once the picture was enhanced"
         elif rc["usable"]:
             action, reason = "log", "Picture usable after enhancement, nothing recognised"
