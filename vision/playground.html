@@ -360,7 +360,6 @@ async function loadEvents(selectClip) {
 // Drop box and Re-run: both hand a file to the inbox watcher, then watch its status until the clip is (re)done.
 let inboxTimer;
 function inboxMsg(text, isError) { const m = $("inboxmsg"); m.textContent = text; m.className = "inboxmsg" + (isError ? " error" : " muted"); }
-async function inboxNow() { try { return (await (await fetch("/api/inbox")).json()).now || 0; } catch { return 0; } }
 function watchInbox(stem, since, verb) {
   const t0 = Date.now();
   clearInterval(inboxTimer);
@@ -384,20 +383,18 @@ async function upload(file) {
   if (!file) return;
   if (!/\.(mp4|mov|mkv|avi)$/i.test(file.name)) return inboxMsg(`${file.name}: not a video file (mp4, mov, mkv, avi).`, true);
   inboxMsg(`Uploading ${file.name} (${(file.size / 1048576).toFixed(1)} MB)…`);
-  const since = await inboxNow();
   const r = await fetch(`/api/upload?name=${encodeURIComponent(file.name)}`, { method: "PUT", body: file });
   const data = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
   if (!r.ok) return inboxMsg(data.error, true);
-  watchInbox(data.name, since, "Analysing");
+  watchInbox(data.name, data.since || 0, "Analysing");   // server time of the request, not the status file's clock
 }
 $("rerun").onclick = async () => {
   const clip = $("clip").value;
   if (!clip || !EVENTS.some((e) => e.clip === clip)) return;
   inboxMsg(`Queuing ${clip} for a fresh run…`);
-  const since = await inboxNow();
   const r = await post("/api/rerun", { clip });
   if (!r.ok) return inboxMsg(r.data.error, true);
-  watchInbox(clip, since, "Re-running");
+  watchInbox(clip, r.data.since || 0, "Re-running");
 };
 const drop = $("drop");
 ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));

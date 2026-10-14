@@ -79,7 +79,8 @@ def _put(url, data):
 def test_upload_lands_in_the_inbox_with_a_safe_name(app, tmp_path):
     base, _ = app
     status, out = _put(base + "/api/upload?name=../My%20Clip%20(1).MOV", b"\x00\x00\x00\x18ftypmp42")
-    assert status == 200 and out == {"name": "My_Clip_1", "file": "My_Clip_1.mov", "bytes": 12}
+    assert status == 200 and {k: out[k] for k in ("name", "file", "bytes")} == {"name": "My_Clip_1", "file": "My_Clip_1.mov", "bytes": 12}
+    assert "since" in out
     assert (tmp_path / "inbox" / "My_Clip_1.mov").read_bytes().startswith(b"\x00\x00\x00\x18ftyp")
     assert not list((tmp_path / "inbox").glob(".*.part"))
     assert _put(base + "/api/upload?name=notes.txt", b"x")[0] == 400
@@ -102,8 +103,10 @@ def test_inbox_status_and_event_list_reload_when_a_timeline_appears(app, tmp_pat
 def test_rerun_redrops_the_clip_into_the_inbox(app, tmp_path):
     base, _ = app
     (tmp_path / "porch.mp4").write_bytes(b"transcoded copy")
+    import time
     status, out = _post(base + "/api/rerun", {"clip": "porch"})
     assert status == 200 and out["queued"] == "porch"
+    assert abs(out["since"] - time.time()) < 5   # server request time, for the page to wait on
     assert (tmp_path / "inbox" / "porch.mp4").read_bytes() == b"transcoded copy"   # copied from samples
     before = (tmp_path / "inbox" / "porch.mp4").stat().st_mtime
     import os

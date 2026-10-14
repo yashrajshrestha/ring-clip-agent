@@ -195,7 +195,7 @@ def make_handler(url: str, samples: Path, inbox: Path | None = None):
                     f.write(chunk)
                     remaining -= len(chunk)
             tmp.replace(inbox / name)
-            self._send(200, {"name": Path(name).stem, "file": name, "bytes": length})
+            self._send(200, {"name": Path(name).stem, "file": name, "bytes": length, "since": time.time()})
 
         def do_POST(self):
             try:
@@ -228,7 +228,8 @@ def make_handler(url: str, samples: Path, inbox: Path | None = None):
                     tmp = inbox / f".{clip}.mp4.part"
                     tmp.write_bytes((src or samples / f"{clip}.mp4").read_bytes())
                     tmp.replace(inbox / f"{clip}.mp4")
-                self._send(200, {"queued": clip, "source": str(src or samples / f"{clip}.mp4")})
+                # `since`: the page waits for a finish time later than this, so an old run cannot satisfy it
+                self._send(200, {"queued": clip, "source": str(src or samples / f"{clip}.mp4"), "since": time.time()})
             elif self.path == "/api/escalate":
                 ev = store.by_key.get((body.get("clip"), body.get("id")))
                 if ev is None:
