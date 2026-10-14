@@ -62,6 +62,13 @@ kept alongside as `decider_decision`.
 
 ## 4. What it measured
 
+- **Wording matters more than anything else.** The same decider, the same 70 events, only the state text
+  changed: bare type names ("cut at 12.3s", "scene change at 42.8s") agreed with the rule stub on 30/70 at
+  47% mean confidence; plain English ("the video cut to a different shot (an edit in the recording, not
+  something at the door)", "the doorstep looks different after the visit, so an object was left or taken")
+  agreed on 65/70 at 69%. Every alert on a video edit and every package event downgraded to "log" was fixed.
+  Write the state the way you would explain it to a person.
+
 - Pexels doorstep clips: 4 of 6 main events decided confidently (82-87%); the 2 low-confidence ones
   (28%, 15%) were exactly the ones a vision model needed to settle.
 - Real theft clip, decider-first agent: the language model ran for 2 of 5 events.
