@@ -64,6 +64,7 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
 .drop b { color: var(--text); }
 .drop .btn { padding: 3px 10px; font-size: 13px; }
 .inboxmsg { margin-top: 6px; font-size: 13px; min-height: 1.2em; }
+.tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--warn); color: var(--warn); margin-left: 6px; vertical-align: middle; }
 #video { display: block; width: 100%; margin-top: 10px; border-radius: 8px; background: #000; aspect-ratio: 16 / 9; }
 .events { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; max-height: 360px; overflow: auto; }
 .events li { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; cursor: pointer; }
@@ -126,10 +127,11 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
 
   <section id="tab-events" class="grid" hidden>
     <div class="card">
-      <h2>Real events from your analysed clips</h2>
+      <h2>Real events from your analysed clips <span class="tag" id="proftag" hidden>looked harder</span></h2>
       <div class="row">
         <select id="clip"></select>
         <button class="btn" id="rerun" type="button" title="Analyse and decide this clip again from scratch">Re-run</button>
+        <button class="btn" id="harder" type="button" title="A second opinion: less strict detector, more frames, stronger brightening, zoomed look on every recheck. Slower.">Look harder</button>
       </div>
       <div class="drop" id="drop">
         <input type="file" id="file" accept="video/*" hidden>
@@ -293,7 +295,9 @@ function renderEvents() {
   const clip = $("clip").value;
   const v = $("video");
   if (v.dataset.clip !== clip) { v.dataset.clip = clip; v.src = `/samples/${encodeURIComponent(clip)}.mp4`; }
-  $("evlist").innerHTML = EVENTS.filter((e) => e.clip === clip).map((e) => {
+  const mine = EVENTS.filter((e) => e.clip === clip);
+  $("proftag").hidden = !(mine[0] && mine[0].profile === "harder");
+  $("evlist").innerHTML = mine.map((e) => {
     const d = e.decision || e.rule;
     const src = e.decision ? e.decision.source : "rule-stub";
     const conf = e.decision && e.decision.confidence != null ? ` · ${Math.round(e.decision.confidence * 100)}% sure` : "";
@@ -357,20 +361,21 @@ async function loadEvents(selectClip) {
   renderEvents();
 }
 
-// Drop box and Re-run: both hand a file to the inbox watcher, then watch its status until the clip is (re)done.
+// Drop box, Re-run and Look harder all hand a file to the inbox watcher, then watch its status until the clip is (re)done.
 let inboxTimer;
 function inboxMsg(text, isError) { const m = $("inboxmsg"); m.textContent = text; m.className = "inboxmsg" + (isError ? " error" : " muted"); }
+function setBusy(busy) { $("rerun").disabled = busy; $("harder").disabled = busy; }
 function watchInbox(stem, since, verb) {
   const t0 = Date.now();
   clearInterval(inboxTimer);
-  $("rerun").disabled = true;
+  setBusy(true);
   inboxTimer = setInterval(async () => {
     const s = await (await fetch("/api/inbox")).json();
     const secs = Math.round((Date.now() - t0) / 1000);
-    if (s.errors && s.errors[stem]) { clearInterval(inboxTimer); $("rerun").disabled = false; return inboxMsg(`${stem}: ${s.errors[stem]}`, true); }
+    if (s.errors && s.errors[stem]) { clearInterval(inboxTimer); setBusy(false); return inboxMsg(`${stem}: ${s.errors[stem]}`, true); }
     if (s.finished && s.finished[stem] >= since) {
       clearInterval(inboxTimer);
-      $("rerun").disabled = false;
+      setBusy(false);
       await loadEvents(stem);
       const n = EVENTS.filter((e) => e.clip === stem).length;
       return inboxMsg(`${stem}: done in ${secs} s, ${n} event${n === 1 ? "" : "s"} decided. Click one below.`);
@@ -388,14 +393,16 @@ async function upload(file) {
   if (!r.ok) return inboxMsg(data.error, true);
   watchInbox(data.name, data.since || 0, "Analysing");   // server time of the request, not the status file's clock
 }
-$("rerun").onclick = async () => {
+async function rerun(profile) {
   const clip = $("clip").value;
   if (!clip || !EVENTS.some((e) => e.clip === clip)) return;
-  inboxMsg(`Queuing ${clip} for a fresh run…`);
-  const r = await post("/api/rerun", { clip });
+  inboxMsg(`Queuing ${clip} for a fresh ${profile === "harder" ? "harder " : ""}run…`);
+  const r = await post("/api/rerun", { clip, profile });
   if (!r.ok) return inboxMsg(r.data.error, true);
-  watchInbox(clip, r.data.since || 0, "Re-running");
-};
+  watchInbox(clip, r.data.since || 0, profile === "harder" ? "Looking harder at" : "Re-running");
+}
+$("rerun").onclick = () => rerun("normal");
+$("harder").onclick = () => rerun("harder");
 const drop = $("drop");
 ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
@@ -425,7 +432,7 @@ checkHealth();
 setInterval(checkHealth, 15000);
 loadEvents();
 $("clip").onchange = renderEvents;
-fetch("/api/inbox").then((r) => r.json()).then((s) => { if (!s.enabled) { drop.hidden = true; $("rerun").hidden = true; } }).catch(() => {});
+fetch("/api/inbox").then((r) => r.json()).then((s) => { if (!s.enabled) { drop.hidden = true; $("rerun").hidden = true; $("harder").hidden = true; } }).catch(() => {});
 </script>
 </body>
 </html>

@@ -131,6 +131,13 @@ def test_no_second_look_when_the_first_look_finds_a_person(dim_clip):
     assert rc["label"] == "person" and "second_look" not in rc
 
 
+def test_harder_profile_always_takes_the_second_look(dim_clip):
+    from vision import profiles
+    with profiles.active("harder"):
+        rc = enhance.recheck(dim_clip, {"type": "dark", "t_start": 0.5, "t_end": 3.5}, AlwaysPerson())
+    assert rc["label"] == "person" and rc["second_look"]["frames"] == 24 and rc["frames"] == 16
+
+
 def test_no_second_look_without_a_detector(dim_clip):
     rc = enhance.recheck(dim_clip, {"type": "dark", "t_start": 0.5, "t_end": 3.5})
     assert "second_look" not in rc

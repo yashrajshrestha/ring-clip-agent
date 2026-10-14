@@ -435,15 +435,18 @@ def load_detector():
     return None
 
 
-def process_clip(clip: Path, out_dir: Path, detector=None) -> dict:
+def process_clip(clip: Path, out_dir: Path, detector=None, profile: str = "normal") -> dict:
     """Transcode one clip, build and write its timeline, update index.json.
-    Returns the index row. Used by the CLI and by the inbox watcher."""
+    Returns the index row. Used by the CLI and by the inbox watcher.
+    `profile` picks how hard OpenCV looks (see vision/profiles.py)."""
+    from .profiles import active
     out_dir.mkdir(parents=True, exist_ok=True)
     video = out_dir / f"{clip.stem}.mp4"
     to_browser_mp4(clip, video)
     started = time.perf_counter()
-    tl = build_timeline(video, detector)
-    tl["clip"], tl["video"] = clip.name, video.name
+    with active(profile, detector):
+        tl = build_timeline(video, detector)
+    tl["clip"], tl["video"], tl["profile"] = clip.name, video.name, profile
     tl["process_seconds"] = round(time.perf_counter() - started, 2)
     (out_dir / f"{clip.stem}.timeline.json").write_text(json.dumps(tl))
     row = {"name": clip.stem, "timeline": f"{clip.stem}.timeline.json",

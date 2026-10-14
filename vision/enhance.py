@@ -3,10 +3,11 @@ look again before bothering the owner.
 
 First look: gamma lifts the dark tones, CLAHE restores local contrast, a
 bilateral filter smooths the grain both of those amplify, and the detector
-runs on the result. Second look, only when the first saw nothing: more frames,
-each cut into five overlapping crops so small or distant figures reach the
-detector larger. None of it can invent light that never reached the sensor: a
-truly black frame stays unusable, and the recheck says so.
+runs on the result. Second look, only when the first saw nothing (or always,
+under the `harder` profile): more frames, each cut into five overlapping crops
+so small or distant figures reach the detector larger. None of it can invent
+light that never reached the sensor: a truly black frame stays unusable, and
+the recheck says so.
 """
 from __future__ import annotations
 
@@ -17,8 +18,10 @@ import numpy as np
 
 from .checks import BLUR_MIN, DARK_MAX_MEAN, blur_score, inner, mask_overlays
 
+# Read at call time, so vision/profiles.py can raise them for one analysis.
 RECHECK_FRAMES = 8        # frames sampled across the event window on the first look
 SECOND_LOOK_FRAMES = 12   # more frames on the second look
+ALWAYS_SECOND_LOOK = False  # True: zoomed second look even when the first look found something
 ZOOM = 0.6                # crop side as a share of the frame; the detector letterboxes to 640, so a figure shows ~1.7x larger
 TARGET_MEAN = 110.0       # gamma aims the mean gray here; measured day footage sits at 80-130
 GAMMA_MAX = 3.0           # beyond this the frame is noise, not picture
@@ -62,9 +65,10 @@ def _label(counts: dict) -> str | None:
     return next((g for g in LABEL_PRIORITY if counts.get(g)), None)
 
 
-def sample_frames(video: str | Path, t_start: float, t_end: float, n: int = RECHECK_FRAMES,
+def sample_frames(video: str | Path, t_start: float, t_end: float, n: int | None = None,
                   width: int = 640) -> list[np.ndarray]:
     """Up to n frames spread across [t_start, t_end], downscaled to `width`."""
+    n = RECHECK_FRAMES if n is None else n
     cap = cv2.VideoCapture(str(video))
     out = []
     for t in np.linspace(t_start, max(t_start, t_end), n):
@@ -95,7 +99,8 @@ def recheck(video: str | Path, event: dict, detector=None) -> dict:
 
     Returns what changed: picture quality before and after, whether the
     enhanced picture is usable, what the detector saw, and, when it saw
-    nothing, what a zoomed second look over more frames found."""
+    nothing (or always under the harder profile), what a zoomed second look
+    over more frames found."""
     frames = sample_frames(video, event["t_start"], event["t_end"])
     if not frames:
         return {"frames": 0, "before": None, "after": None, "usable": False, "objects": {}, "label": None}
@@ -114,7 +119,7 @@ def recheck(video: str | Path, event: dict, detector=None) -> dict:
         "frames": len(frames), "before": before_m, "after": after_m,
         "usable": _usable(after_m), "objects": counts, "label": _label(counts),
     }
-    if detector is not None and out["label"] is None:
+    if detector is not None and (out["label"] is None or ALWAYS_SECOND_LOOK):
         out["second_look"] = second_look(video, event, detector)
-        out["label"] = out["second_look"]["label"]
+        out["label"] = out["label"] or out["second_look"]["label"]
     return out

@@ -56,6 +56,29 @@ def test_a_touched_file_is_processed_again(box):
     assert status["finished"]["porch"] > first and status["done"] == ["porch"]
 
 
+def test_profile_sidecar_is_used_once(box, monkeypatch):
+    from vision import timeline
+    seen = []
+    real = timeline.process_clip
+
+    def spy(clip, out_dir, detector=None, profile="normal"):
+        seen.append(profile)
+        return real(clip, out_dir, detector, profile)
+
+    monkeypatch.setattr(inbox, "process_clip", spy)
+    _write_clip(box.inbox / "porch.mp4")
+    (box.inbox / "porch.profile").write_text("harder")
+    box.poll(), box.poll()
+    assert seen == ["harder"] and not (box.inbox / "porch.profile").exists()
+    assert json.loads((box.out_dir / "porch.timeline.json").read_text())["profile"] == "harder"
+    (box.inbox / "porch.profile").write_text("nonsense")
+    import os, time
+    later = time.time() + 5
+    os.utime(box.inbox / "porch.mp4", (later, later))
+    box.poll()
+    assert seen == ["harder", "normal"]   # an unknown profile falls back to normal
+
+
 def test_ignores_non_videos_and_hidden_files(box):
     (box.inbox / "notes.txt").write_text("x")
     (box.inbox / ".porch.mp4.part").write_bytes(b"xx")

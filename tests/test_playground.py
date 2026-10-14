@@ -115,6 +115,11 @@ def test_rerun_redrops_the_clip_into_the_inbox(app, tmp_path):
     assert (tmp_path / "inbox" / "porch.mp4").stat().st_mtime > before - 100   # touched, not re-copied
     assert _post(base + "/api/rerun", {"clip": "missing"})[0] == 404
     assert _post(base + "/api/rerun", {"clip": "../porch"})[0] == 404
+    status, out = _post(base + "/api/rerun", {"clip": "porch", "profile": "harder"})
+    assert status == 200 and out["profile"] == "harder"
+    assert (tmp_path / "inbox" / "porch.profile").read_text() == "harder"   # sidecar for the watcher
+    assert _post(base + "/api/rerun", {"clip": "porch", "profile": "hardest"})[0] == 400
+    assert json.loads(_get(base + "/api/events")[1])[0]["profile"] == "normal"
 
 
 def test_upload_is_refused_when_the_inbox_is_off(tmp_path, fake_decider):

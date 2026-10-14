@@ -25,6 +25,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from . import decider, escalate
+from .profiles import PROFILES
 from .timeline import VIDEO_EXT, _decide
 
 PAGE = Path(__file__).with_name("playground.html")
@@ -40,13 +41,15 @@ def load_events(samples: Path) -> list[dict]:
     for path in sorted(samples.glob("*.timeline.json")):
         clip = path.name.removesuffix(".timeline.json")
         try:
-            events = json.loads(path.read_text())["events"]
+            tl = json.loads(path.read_text())
+            events = tl["events"]
         except (ValueError, KeyError, OSError):
             continue  # a timeline still being written, or the inbox's marker for a broken file
         for n, ev in enumerate(events):
             rule = _decide(ev)
             out.append({
                 "clip": clip, "id": ev["id"], "type": ev["type"], "label": ev.get("label"),
+                "profile": tl.get("profile", "normal"),
                 "t_start": ev["t_start"], "t_end": ev["t_end"], "say": ev.get("say"),
                 "decision": ev.get("decision"),
                 "rule": {"action": rule["action"], "reason": rule["reason"]},
@@ -214,22 +217,28 @@ def make_handler(url: str, samples: Path, inbox: Path | None = None):
             elif self.path == "/api/rerun":
                 # Re-drop the clip: the watcher picks up a touched or copied file like a new one.
                 clip = str(body.get("clip", ""))
+                profile = str(body.get("profile", "normal"))
                 if inbox is None:
                     return self._send(503, {"error": "the inbox is disabled on this server"})
                 if not clip or clip != Path(clip).name or not (samples / f"{clip}.timeline.json").exists():
                     return self._send(404, {"error": "no such clip"})
+                if profile not in PROFILES:
+                    return self._send(400, {"error": f"profile must be one of {', '.join(PROFILES)}"})
                 src = next((p for p in inbox.glob(f"{clip}.*") if p.suffix.lower() in VIDEO_EXT), None) \
                     or next((p for p in inbox.parent.rglob(f"{clip}.*")
                              if p.suffix.lower() in VIDEO_EXT and inbox not in p.parents), None)
+                inbox.mkdir(parents=True, exist_ok=True)
+                if profile != "normal":   # sidecar the watcher reads and removes
+                    (inbox / f"{clip}.profile").write_text(profile)
                 if src is not None and src.parent == inbox:
                     src.touch()
                 else:
-                    inbox.mkdir(parents=True, exist_ok=True)
                     tmp = inbox / f".{clip}.mp4.part"
                     tmp.write_bytes((src or samples / f"{clip}.mp4").read_bytes())
                     tmp.replace(inbox / f"{clip}.mp4")
                 # `since`: the page waits for a finish time later than this, so an old run cannot satisfy it
-                self._send(200, {"queued": clip, "source": str(src or samples / f"{clip}.mp4"), "since": time.time()})
+                self._send(200, {"queued": clip, "profile": profile, "source": str(src or samples / f"{clip}.mp4"),
+                                 "since": time.time()})
             elif self.path == "/api/escalate":
                 ev = store.by_key.get((body.get("clip"), body.get("id")))
                 if ev is None:

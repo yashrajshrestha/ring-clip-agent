@@ -7,9 +7,11 @@ polls is transcoded, analysed (OpenCV, detector), decided (Decider 2B when
 DECIDER_URL is set, else the rule stub; recheck and escalation as configured)
 and written to the samples folder, where the playground picks it up. A file
 touched or replaced after its timeline was written is processed again, which
-is how the playground's Re-run button works. Status is kept in
-<out>/inbox.json. The playground runs this watcher in a thread, so
-`python -m vision.playground` alone gives a working drop box.
+is how the playground's Re-run button works. A sidecar `<name>.profile` next
+to the video names an analysis profile for that run ("harder" for the Look
+harder button) and is removed once used. Status is kept in <out>/inbox.json.
+The playground runs this watcher in a thread, so `python -m vision.playground`
+alone gives a working drop box.
 """
 from __future__ import annotations
 
@@ -21,6 +23,7 @@ import time
 import traceback
 from pathlib import Path
 
+from .profiles import PROFILES
 from .timeline import VIDEO_EXT, load_detector, process_clip
 
 
@@ -55,6 +58,15 @@ class Inbox:
         self._sizes[p.name] = size
         return stable
 
+    def _profile_for(self, p: Path) -> str:
+        """The profile named by a sidecar file, consumed on read; `normal` otherwise."""
+        sidecar = p.with_suffix(".profile")
+        if not sidecar.exists():
+            return "normal"
+        name = sidecar.read_text().strip()
+        sidecar.unlink()
+        return name if name in PROFILES else "normal"
+
     def poll(self) -> list[str]:
         """One pass: process every stable pending clip. Returns the names processed."""
         pending = self.pending()
@@ -68,7 +80,7 @@ class Inbox:
             self.status["queue"] = [q.stem for q in pending if q != p]
             self._write_status()
             try:
-                process_clip(p, self.out_dir, self.detector)
+                process_clip(p, self.out_dir, self.detector, self._profile_for(p))
                 if p.stem not in self.status["done"]:
                     self.status["done"].append(p.stem)
                 self.status["finished"][p.stem] = time.time()
