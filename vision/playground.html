@@ -422,6 +422,14 @@ function progressOf(pr) {
 // Queue line: what the watcher is working on (with Cancel) and what is waiting. Runs on its own timer,
 // so a clip dropped in the folder or uploaded shows up within a few seconds, before it is analysed.
 let QUEUE = { processing: null, waiting: [] };
+// Seconds since the progress last moved; the bar only steps when a decider answer lands (10-50 s on a laptop).
+let STEP = { key: "", since: Date.now() };
+function stepSecs(s) {
+  const pr = s.progress || {};
+  const key = `${s.processing}|${pr.stage}|${pr.done}`;
+  if (key !== STEP.key) STEP = { key, since: Date.now() };
+  return Math.round((Date.now() - STEP.since) / 1000);
+}
 async function refreshQueue() {
   let s;
   try { s = await (await fetch("/api/inbox")).json(); } catch { return; }
@@ -434,7 +442,7 @@ async function refreshQueue() {
     box.hidden = false;
     const { pct, label } = progressOf(s.progress);
     box.innerHTML =
-      (s.processing ? `<div class="row"><span>Now: <b>${esc(s.processing)}</b> · ${esc(label)} · ${pct}%</span>
+      (s.processing ? `<div class="row"><span>Now: <b>${esc(s.processing)}</b> · ${esc(label)} · ${pct}% · this step ${stepSecs(s)} s</span>
          <button class="btn" id="cancel" type="button" title="Stop this run; its previous results are kept">Cancel</button></div>
          <div class="qbar"><div style="width:${pct}%"></div></div>` : "") +
       (waiting.length ? `<div class="muted">Waiting: ${waiting.map((w, i) => `${i + 1}. ${esc(w)}`).join(" · ")}</div>` : "");
@@ -487,7 +495,7 @@ function watchInbox(stem, since, verb) {
       const { pct, label } = progressOf(s.progress);
       $("progress").hidden = false;
       $("pfill").style.width = `${pct}%`;
-      inboxMsg(`${verb} ${stem}: ${label} · ${pct}% · ${secs} s`);
+      inboxMsg(`${verb} ${stem}: ${label} · ${pct}% · this step ${stepSecs(s)} s · ${secs} s in total`);
     } else {
       $("progress").hidden = false;
       $("pfill").style.width = "0%";
@@ -564,7 +572,7 @@ checkHealth();
 setInterval(checkHealth, 15000);
 loadEvents();
 $("clip").onchange = renderEvents;
-setInterval(refreshQueue, 3000);
+setInterval(refreshQueue, 2000);
 fetch("/api/inbox").then((r) => r.json()).then((s) => { if (!s.enabled) { drop.hidden = true; $("rerun").hidden = true; $("harder").hidden = true; } }).catch(() => {});
 </script>
 </body>
