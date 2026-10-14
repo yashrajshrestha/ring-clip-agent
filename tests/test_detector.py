@@ -66,7 +66,8 @@ def test_background_object_does_not_label_the_event(tmp_path):
     p = tmp_path / "clip.mp4"
     _write_clip(p)
     motion = [e for e in timeline.build_timeline(p, ParkedCarDetector())["events"] if e["type"] == "motion"]
-    assert motion[0]["label"] is None
+    assert motion[0]["label"] != "vehicle"            # the parked car never labels the event...
+    assert motion[0]["label"] == "figure"             # ...the steady person-sized movement does
     assert motion[0]["objects"] == {}
 
 

@@ -71,6 +71,47 @@ def test_one_motion_event_for_one_moving_box(clip):
     assert events[0]["decision"]["source"] == "rule-stub"
 
 
+def test_person_sized_steady_movement_is_a_figure_without_a_detector(clip):
+    events = [e for e in timeline.build_timeline(clip)["events"] if e["type"] == "motion"]
+    assert len(events) == 1
+    ev = events[0]
+    assert ev["label"] == "figure" and ev["say"] == "Person-sized movement at the door."
+    assert ev["track"]["net"] >= timeline.TRACK_MIN_MOVE and ev["track"]["frames"] > 10
+    assert ev["decision"]["action"] == "alert" and "moved steadily" in ev["decision"]["reason"]
+
+
+def test_small_or_still_motion_is_not_a_figure():
+    still = {"type": "motion", "t_start": 1.0, "t_end": 4.0, "peak_area": 0.2, "track": {"frames": 30, "net": 0.01, "path": 0.3}}
+    tiny = {"type": "motion", "t_start": 1.0, "t_end": 4.0, "peak_area": 0.005, "track": {"frames": 30, "net": 0.5, "path": 0.5}}
+    brief = {"type": "motion", "t_start": 1.0, "t_end": 1.4, "peak_area": 0.2, "track": {"frames": 5, "net": 0.5, "path": 0.5}}
+    assert not any(timeline._is_figure(e) for e in (still, tiny, brief))
+
+
+def _darken(src, dst, level=0.15):
+    """The same clip at a fraction of its brightness, like a porch at night."""
+    cap = cv2.VideoCapture(str(src))
+    wr = cv2.VideoWriter(str(dst), cv2.VideoWriter_fourcc(*"mp4v"), FPS, (W, H))
+    while True:
+        ok, f = cap.read()
+        if not ok:
+            break
+        wr.write((f * level).astype(np.uint8))
+    cap.release()
+    wr.release()
+
+
+def test_zoomed_detection_runs_on_its_own_when_the_frame_is_dark(clip, tmp_path, monkeypatch):
+    from tests.test_profiles import CropOnlyDetector
+    monkeypatch.delenv("DECIDER_URL", raising=False)
+    dark = tmp_path / "dark_walk.mp4"
+    _darken(clip, dark)
+    day = [e for e in timeline.build_timeline(clip, CropOnlyDetector())["events"] if e["type"] == "motion"]
+    night = [e for e in timeline.build_timeline(dark, CropOnlyDetector())["events"] if e["type"] == "motion"]
+    assert day and day[0]["label"] != "person"          # daylight, normal profile: full frame only, nothing seen
+    assert night and night[0]["label"] == "person"      # dark: the zoomed crop runs on its own
+    assert timeline.ZOOM_MOTION is False
+
+
 def test_package_left_is_a_scene_change(tmp_path):
     p = tmp_path / "pkg.mp4"
     _write_clip(p, seconds=8, box_from=1.0, box_to=3.5, leave_package=True)

@@ -55,8 +55,13 @@ def _describe(ev: dict) -> str:
     if dur > 0:
         parts.append(f"lasting {dur:.1f}s")
     if ev["type"] == "motion":
-        parts.append(f"the detector saw a {ev['label']}" if ev.get("label")
-                     else "the detector saw no person, animal or vehicle")
+        if ev.get("label") == "figure":
+            parts.append("a person-sized shape moved steadily across the porch, which the detector could not "
+                         "identify (likely a person in the dark or partly hidden)")
+        elif ev.get("label"):
+            parts.append(f"the detector saw a {ev['label']}")
+        else:
+            parts.append("the detector saw no person, animal or vehicle")
     if ev.get("peak_area"):
         parts.append(f"covering {ev['peak_area']:.0%} of the frame")
     return ", ".join(parts)

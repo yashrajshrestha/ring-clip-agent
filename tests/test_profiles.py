@@ -38,7 +38,7 @@ def test_harder_profile_finds_a_person_by_zooming_on_the_motion(tmp_path, monkey
     clip = tmp_path / "clip.mp4"
     _write_clip(clip)
     normal = [e for e in timeline.build_timeline(clip, CropOnlyDetector())["events"] if e["type"] == "motion"]
-    assert normal and normal[0]["label"] is None          # full-frame detector sees nothing
+    assert normal and normal[0]["label"] != "person"      # full-frame detector sees nothing (tracking may say "figure")
     with profiles.active("harder", CropOnlyDetector()):
         harder = [e for e in timeline.build_timeline(clip, CropOnlyDetector())["events"] if e["type"] == "motion"]
     assert harder and harder[0]["label"] == "person"       # the zoomed crop does

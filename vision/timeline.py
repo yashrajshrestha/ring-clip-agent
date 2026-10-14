@@ -42,6 +42,10 @@ PERSON_AREA = 0.03       # rule-stub: peak motion at least this big reads as a p
 ZOOM_MOTION = False      # harder profile: also run the detector on a crop around the moving region
 ZOOM_GROW = 2.0          # crop is this many times the motion box on each side...
 ZOOM_MIN_SHARE = 0.4     # ...and at least this share of the frame, so the crop is not tiny
+ZOOM_DARK_BRIGHT = 60.0  # zoomed detection runs on its own below this mean gray...
+ZOOM_IR_BRIGHT = 100.0   # ...or in IR night mode below this; measured IR night porches sit at 70-90
+TRACK_MIN_S = 1.0        # a person-sized blob that moves steadily this long reads as a figure...
+TRACK_MIN_MOVE = 0.08    # ...when its centre travels at least this share of the frame
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".avi"}
 
 
@@ -96,6 +100,9 @@ def _decide(event: dict) -> dict:
     if kind == "motion" and label == "person":
         dur = event["t_end"] - event["t_start"]
         action, reason = "alert", f"Person detected for {dur:.1f}s"
+    elif kind == "motion" and label == "figure":
+        dur = event["t_end"] - event["t_start"]
+        action, reason = "alert", f"Person-sized shape moved steadily for {dur:.1f}s"
     elif kind == "motion" and label == "animal":
         action, reason = "ignore", "Animal, not a visitor"
     elif kind == "motion" and label == "vehicle":
@@ -137,7 +144,8 @@ SAY = {
     "dark": "Image is too dark.",
     "cut": "Camera view changed.",
 }
-SAY_MOTION = {"person": "Person at the door.", "animal": "Animal at the door.", "vehicle": "Vehicle passing."}
+SAY_MOTION = {"person": "Person at the door.", "animal": "Animal at the door.", "vehicle": "Vehicle passing.",
+              "figure": "Person-sized movement at the door."}
 LABEL_PRIORITY = ("person", "animal", "vehicle")  # a person with a car behind them is a person
 
 
@@ -283,7 +291,8 @@ def build_timeline(path: str | Path, detector=None) -> dict:
         if detector is not None and box is not None:
             if i - last_det >= det_every:
                 last_objs, last_det = detector.detect(small), i
-                if ZOOM_MOTION:
+                # Small figures in the dark need the zoom; under the harder profile every motion gets it.
+                if ZOOM_MOTION or bright < ZOOM_DARK_BRIGHT or (ir and bright < ZOOM_IR_BRIGHT):
                     last_objs = last_objs + zoomed_detect(detector, small, box)
             objs = last_objs
         else:
@@ -318,6 +327,9 @@ def build_timeline(path: str | Path, detector=None) -> dict:
         ev["id"] = n
         if ev["type"] == "motion":
             ev["objects"], ev["label"] = _label(ev, frames)
+            ev["track"] = _track(ev, frames)
+            if ev["label"] is None and _is_figure(ev):
+                ev["label"] = "figure"
             ev["say"] = SAY_MOTION.get(ev["label"], SAY["motion"])
         else:
             ev["say"] = SAY[ev["type"]]
@@ -361,6 +373,27 @@ def _overlaps(obj_box: list[float], motion_box: list[float] | None, group: str =
     if smaller <= 0 or iw * ih / smaller < min_share:
         return False
     return group == "person" or ow * oh >= min_fill * mw * mh
+
+
+def _track(event: dict, frames: list[dict]) -> dict:
+    """How the motion box moved during the event: net displacement of its
+    centre and the length of its path, as shares of the frame."""
+    centres = [(f["box"][0] + f["box"][2] / 2, f["box"][1] + f["box"][3] / 2)
+               for f in frames if f["box"] is not None and event["t_start"] <= f["t"] <= event["t_end"]]
+    if len(centres) < 2:
+        return {"frames": len(centres), "net": 0.0, "path": 0.0}
+    net = ((centres[-1][0] - centres[0][0]) ** 2 + (centres[-1][1] - centres[0][1]) ** 2) ** 0.5
+    path = sum(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5 for a, b in zip(centres, centres[1:]))
+    return {"frames": len(centres), "net": round(net, 4), "path": round(path, 4)}
+
+
+def _is_figure(event: dict) -> bool:
+    """A person-sized blob that lasts and travels steadily: the detector could
+    not name it (small, dark, blurred, behind a railing), but the motion says
+    person. Flicker and shadows fail the duration or the travel test."""
+    dur = event["t_end"] - event["t_start"]
+    return (event["peak_area"] >= PERSON_AREA and dur >= TRACK_MIN_S
+            and event["track"]["net"] >= TRACK_MIN_MOVE)
 
 
 def _label(event: dict, frames: list[dict]) -> tuple[dict, str | None]:
