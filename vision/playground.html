@@ -58,6 +58,11 @@ textarea { min-height: 96px; resize: vertical; }
 details { margin-top: 12px; }
 summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; font-size: 12px; max-height: 320px; }
+.drop { margin-top: 10px; padding: 12px 14px; border: 2px dashed var(--line); border-radius: 10px; text-align: center; font-size: 14px; color: var(--muted); }
+.drop.over { border-color: var(--info); color: var(--text); background: color-mix(in srgb, var(--info) 8%, var(--panel)); }
+.drop b { color: var(--text); }
+.drop .btn { padding: 3px 10px; font-size: 13px; }
+.inboxmsg { margin-top: 6px; font-size: 13px; min-height: 1.2em; }
 #video { display: block; width: 100%; margin-top: 10px; border-radius: 8px; background: #000; aspect-ratio: 16 / 9; }
 .events { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; max-height: 360px; overflow: auto; }
 .events li { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; cursor: pointer; }
@@ -122,6 +127,12 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
     <div class="card">
       <h2>Real events from your analysed clips</h2>
       <select id="clip"></select>
+      <div class="drop" id="drop">
+        <input type="file" id="file" accept="video/*" hidden>
+        <b>Drop a clip here</b> or <button class="btn" id="choose" type="button">choose a file</button>
+        <div class="muted">OpenCV analyses it and the decider decides each event; it then appears in the list above.</div>
+        <div class="inboxmsg" id="inboxmsg"></div>
+      </div>
       <video id="video" controls playsinline muted preload="metadata"></video>
       <ul class="events" id="evlist"></ul>
     </div>
@@ -138,7 +149,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 
 const PRESETS = {
   "Doorbell action": {
-    state: "Doorbell camera event: motion at 2.0s, lasting 4.0s, detector saw a person, covering 12% of the frame. Objects detected: person x8.",
+    state: "Doorbell camera event: something moved at the door at 2.0s, lasting 4.0s, the detector saw a person, covering 12% of the frame. Objects detected: person x8.",
     type: "choice", instructions: "What should the doorbell do about this event for the home owner?",
     options: [["alert", "Notify the owner now: a person is at the door, or something was left or taken."],
               ["ignore", "Do nothing: an animal, a passing car, shadows, or tiny brief motion."],
@@ -146,12 +157,12 @@ const PRESETS = {
               ["log", "Keep a note only: a camera mode change or a cut in the video, nothing at the door."]],
   },
   "Is someone at the door?": {
-    state: "Doorbell camera event: motion at 5.2s, lasting 0.4s, covering 1% of the frame. Earlier in this clip: night mode at 0.0s.",
+    state: "Doorbell camera event: something moved at the door at 5.2s, lasting 0.4s, the detector saw no person, animal or vehicle, covering 1% of the frame. Earlier in this clip: the camera switched to night mode at 0.0s.",
     type: "noul", instructions: "Is a person standing at the door?",
     options: [["true", "a visitor, courier or other person is at the door"], ["false", "only noise, an animal, light or a passing car"]],
   },
   "Urgency score": {
-    state: "Doorbell camera event: scene change at 41.0s. Earlier in this clip: motion at 30.1s, lasting 9.0s, detector saw a person.",
+    state: "Doorbell camera event: the doorstep looks different after the visit, so an object was left or taken at 41.0s. Earlier in this clip: something moved at the door at 30.1s, lasting 9.0s, the detector saw a person.",
     type: "score", instructions: "How urgently should the home owner look at this?",
     levels: ["not at all", "when convenient", "soon", "right now"],
   },
@@ -278,12 +289,16 @@ function renderEvents() {
   const clip = $("clip").value;
   const v = $("video");
   if (v.dataset.clip !== clip) { v.dataset.clip = clip; v.src = `/samples/${encodeURIComponent(clip)}.mp4`; }
-  $("evlist").innerHTML = EVENTS.filter((e) => e.clip === clip).map((e) => `
+  $("evlist").innerHTML = EVENTS.filter((e) => e.clip === clip).map((e) => {
+    const d = e.decision || e.rule;
+    const src = e.decision ? e.decision.source : "rule-stub";
+    const conf = e.decision && e.decision.confidence != null ? ` · ${Math.round(e.decision.confidence * 100)}% sure` : "";
+    return `
     <li data-id="${e.id}"><div class="row" style="justify-content:space-between">
       <span>${esc(e.say || e.type)} ${e.label ? `<span class="muted">(${esc(e.label)})</span>` : ""}</span>
-      <span class="pill ${esc(e.rule.action)}" title="Rule stub">${esc(e.rule.action)}</span></div>
-      <span class="time">${fmt(e.t_start)}${e.t_end > e.t_start ? ` to ${fmt(e.t_end)}` : ""} · ${esc(e.type.replace("_", " "))}</span></li>`).join("")
-    || `<li class="muted">No events in this clip.</li>`;
+      <span class="pill ${esc(d.action)}" title="${esc(src)}${esc(conf)}">${esc(d.action)}</span></div>
+      <span class="time">${fmt(e.t_start)}${e.t_end > e.t_start ? ` to ${fmt(e.t_end)}` : ""} · ${esc(e.type.replace("_", " "))} · <span title="who decided">${esc(src)}${esc(conf)}</span></span></li>`;
+  }).join("") || `<li class="muted">No events in this clip.</li>`;
   $("evlist").querySelectorAll("li[data-id]").forEach((li) => li.onclick = () => runEvent(clip, Number(li.dataset.id), li));
 }
 async function runEvent(clip, id, li) {
@@ -329,6 +344,48 @@ async function runEvent(clip, id, li) {
   };
 }
 
+async function loadEvents(selectClip) {
+  EVENTS = await (await fetch("/api/events")).json();
+  const clips = [...new Set(EVENTS.map((e) => e.clip))];
+  const current = selectClip || $("clip").value;
+  $("clip").innerHTML = clips.map((c) => `<option>${esc(c)}</option>`).join("") || `<option>No timelines found</option>`;
+  if (clips.includes(current)) $("clip").value = current;
+  renderEvents();
+}
+
+// Drop box: upload into the inbox, then watch the inbox status until the clip is analysed.
+let inboxTimer;
+function inboxMsg(text, isError) { const m = $("inboxmsg"); m.textContent = text; m.className = "inboxmsg" + (isError ? " error" : " muted"); }
+async function upload(file) {
+  if (!file) return;
+  if (!/\.(mp4|mov|mkv|avi)$/i.test(file.name)) return inboxMsg(`${file.name}: not a video file (mp4, mov, mkv, avi).`, true);
+  inboxMsg(`Uploading ${file.name} (${(file.size / 1048576).toFixed(1)} MB)…`);
+  const r = await fetch(`/api/upload?name=${encodeURIComponent(file.name)}`, { method: "PUT", body: file });
+  const data = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  if (!r.ok) return inboxMsg(data.error, true);
+  const t0 = Date.now();
+  clearInterval(inboxTimer);
+  inboxTimer = setInterval(async () => {
+    const s = await (await fetch("/api/inbox")).json();
+    const secs = Math.round((Date.now() - t0) / 1000);
+    if (s.errors && s.errors[data.name]) { clearInterval(inboxTimer); return inboxMsg(`${data.name}: ${s.errors[data.name]}`, true); }
+    if (s.done && s.done.includes(data.name)) {
+      clearInterval(inboxTimer);
+      await loadEvents(data.name);
+      const n = EVENTS.filter((e) => e.clip === data.name).length;
+      return inboxMsg(`${data.name}: done in ${secs} s, ${n} event${n === 1 ? "" : "s"} decided. Click one below.`);
+    }
+    inboxMsg(s.processing === data.name ? `Analysing ${data.name}: OpenCV, detector, decider… ${secs} s`
+           : `${data.name} is queued${s.processing ? ` behind ${s.processing}` : ""}… ${secs} s`);
+  }, 2000);
+}
+const drop = $("drop");
+["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => upload(e.dataTransfer.files[0]));
+$("choose").onclick = () => $("file").click();
+$("file").onchange = () => upload($("file").files[0]);
+
 async function checkHealth() {
   try {
     const h = await (await fetch("/api/health")).json();
@@ -349,13 +406,9 @@ $("addopt").onclick = () => $("opts").append($("qtype").value === "score" ? leve
 loadPreset("Doorbell action");
 checkHealth();
 setInterval(checkHealth, 15000);
-fetch("/api/events").then((r) => r.json()).then((evs) => {
-  EVENTS = evs;
-  const clips = [...new Set(evs.map((e) => e.clip))];
-  $("clip").innerHTML = clips.map((c) => `<option>${esc(c)}</option>`).join("") || `<option>No timelines found</option>`;
-  renderEvents();
-});
+loadEvents();
 $("clip").onchange = renderEvents;
+fetch("/api/inbox").then((r) => r.json()).then((s) => { if (!s.enabled) { drop.hidden = true; } }).catch(() => {});
 </script>
 </body>
 </html>

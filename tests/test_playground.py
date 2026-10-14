@@ -62,9 +62,51 @@ def fake_decider():
 def app(tmp_path, fake_decider):
     (tmp_path / "porch.timeline.json").write_text(json.dumps({"events": EVENTS}))
     url, seen = fake_decider
-    srv, base = _serve(playground.make_handler(url, tmp_path))
+    srv, base = _serve(playground.make_handler(url, tmp_path, tmp_path / "inbox"))
     yield base, seen
     srv.shutdown()
+
+
+def _put(url, data):
+    req = urllib.request.Request(url, data, {"content-type": "application/octet-stream"}, method="PUT")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.status, json.load(r)
+    except urllib.error.HTTPError as e:
+        return e.code, json.load(e)
+
+
+def test_upload_lands_in_the_inbox_with_a_safe_name(app, tmp_path):
+    base, _ = app
+    status, out = _put(base + "/api/upload?name=../My%20Clip%20(1).MOV", b"\x00\x00\x00\x18ftypmp42")
+    assert status == 200 and out == {"name": "My_Clip_1", "file": "My_Clip_1.mov", "bytes": 12}
+    assert (tmp_path / "inbox" / "My_Clip_1.mov").read_bytes().startswith(b"\x00\x00\x00\x18ftyp")
+    assert not list((tmp_path / "inbox").glob(".*.part"))
+    assert _put(base + "/api/upload?name=notes.txt", b"x")[0] == 400
+    assert _put(base + "/api/upload?name=a.mp4", b"")[0] == 413
+
+
+def test_inbox_status_and_event_list_reload_when_a_timeline_appears(app, tmp_path):
+    base, _ = app
+    status = json.loads(_get(base + "/api/inbox")[1])
+    assert status["enabled"] is True and status["folder"].endswith("inbox")
+    (tmp_path / "inbox.json").write_text(json.dumps({"processing": "new", "queue": [], "done": [], "errors": {}}))
+    assert json.loads(_get(base + "/api/inbox")[1])["processing"] == "new"
+    assert {e["clip"] for e in json.loads(_get(base + "/api/events")[1])} == {"porch"}
+    (tmp_path / "new.timeline.json").write_text(json.dumps({"events": EVENTS[:1]}))
+    evs = json.loads(_get(base + "/api/events")[1])
+    assert {e["clip"] for e in evs} == {"porch", "new"}
+    assert _post(base + "/api/event", {"clip": "new", "id": 0})[0] == 200
+
+
+def test_upload_is_refused_when_the_inbox_is_off(tmp_path, fake_decider):
+    url, _ = fake_decider
+    srv, base = _serve(playground.make_handler(url, tmp_path, None))
+    try:
+        assert _put(base + "/api/upload?name=a.mp4", b"xx")[0] == 503
+        assert json.loads(_get(base + "/api/inbox")[1])["enabled"] is False
+    finally:
+        srv.shutdown()
 
 
 def _get(url):

@@ -426,41 +426,48 @@ def _motion_events(frames: list[dict], thumbs: list[np.ndarray], fps: float, sta
     return out
 
 
+def load_detector():
+    """The YOLOX detector when its model file is present, else None (no object labels)."""
+    from .detector import Detector, default_model_path
+    if default_model_path().exists():
+        return Detector()
+    print(f"no model at {default_model_path()}, running without object labels", file=sys.stderr)
+    return None
+
+
+def process_clip(clip: Path, out_dir: Path, detector=None) -> dict:
+    """Transcode one clip, build and write its timeline, update index.json.
+    Returns the index row. Used by the CLI and by the inbox watcher."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    video = out_dir / f"{clip.stem}.mp4"
+    to_browser_mp4(clip, video)
+    started = time.perf_counter()
+    tl = build_timeline(video, detector)
+    tl["clip"], tl["video"] = clip.name, video.name
+    tl["process_seconds"] = round(time.perf_counter() - started, 2)
+    (out_dir / f"{clip.stem}.timeline.json").write_text(json.dumps(tl))
+    row = {"name": clip.stem, "timeline": f"{clip.stem}.timeline.json",
+           "events": len(tl["events"]), "duration": tl["duration"]}
+    # Merge with the existing index so runs on different folders add up.
+    index_path = out_dir / "index.json"
+    index = [r for r in (json.loads(index_path.read_text()) if index_path.exists() else []) if r["name"] != clip.stem]
+    index.append(row)
+    index_path.write_text(json.dumps(sorted(index, key=lambda r: r["name"]), indent=2))
+    print(f"{clip.name}: {len(tl['frames'])} frames, {len(tl['events'])} events, {tl['process_seconds']}s",
+          file=sys.stderr)
+    return row
+
+
 def main(argv: list[str]) -> int:
     args = [a for a in argv[1:] if not a.startswith("--")]
     if len(args) != 2:
         print(__doc__, file=sys.stderr)
         return 2
     src, out_dir = Path(args[0]), Path(args[1])
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    detector = None
-    if "--no-detect" not in argv:
-        from .detector import Detector, default_model_path
-        if default_model_path().exists():
-            detector = Detector()
-        else:
-            print(f"no model at {default_model_path()}, running without object labels", file=sys.stderr)
+    detector = None if "--no-detect" in argv else load_detector()
     clips = sorted(p for p in src.iterdir() if p.suffix.lower() in VIDEO_EXT) if src.is_dir() else [src]
-
-    # Merge with any existing index so runs on different folders add up.
-    index_path = out_dir / "index.json"
-    old = json.loads(index_path.read_text()) if index_path.exists() else []
-    names = {c.stem for c in clips}
-    index = [row for row in old if row["name"] not in names]
     for clip in clips:
-        video = out_dir / f"{clip.stem}.mp4"
-        to_browser_mp4(clip, video)
-        started = time.perf_counter()
-        tl = build_timeline(video, detector)
-        tl["clip"], tl["video"] = clip.name, video.name
-        tl["process_seconds"] = round(time.perf_counter() - started, 2)
-        (out_dir / f"{clip.stem}.timeline.json").write_text(json.dumps(tl))
-        index.append({"name": clip.stem, "timeline": f"{clip.stem}.timeline.json",
-                      "events": len(tl["events"]), "duration": tl["duration"]})
-        print(f"{clip.name}: {len(tl['frames'])} frames, {len(tl['events'])} events, "
-              f"{tl['process_seconds']}s", file=sys.stderr)
-    index_path.write_text(json.dumps(sorted(index, key=lambda r: r["name"]), indent=2))
+        process_clip(clip, out_dir, detector)
     return 0
 
 
