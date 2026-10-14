@@ -211,6 +211,24 @@ def make_handler(url: str, samples: Path, inbox: Path | None = None):
                     return self._send(404, {"error": "no such event"})
                 status, out = timed_ask(ev["request"], url)
                 self._send(status, {**out, "request": ev["request"], "rule": ev["rule"]})
+            elif self.path == "/api/rerun":
+                # Re-drop the clip: the watcher picks up a touched or copied file like a new one.
+                clip = str(body.get("clip", ""))
+                if inbox is None:
+                    return self._send(503, {"error": "the inbox is disabled on this server"})
+                if not clip or clip != Path(clip).name or not (samples / f"{clip}.timeline.json").exists():
+                    return self._send(404, {"error": "no such clip"})
+                src = next((p for p in inbox.glob(f"{clip}.*") if p.suffix.lower() in VIDEO_EXT), None) \
+                    or next((p for p in inbox.parent.rglob(f"{clip}.*")
+                             if p.suffix.lower() in VIDEO_EXT and inbox not in p.parents), None)
+                if src is not None and src.parent == inbox:
+                    src.touch()
+                else:
+                    inbox.mkdir(parents=True, exist_ok=True)
+                    tmp = inbox / f".{clip}.mp4.part"
+                    tmp.write_bytes((src or samples / f"{clip}.mp4").read_bytes())
+                    tmp.replace(inbox / f"{clip}.mp4")
+                self._send(200, {"queued": clip, "source": str(src or samples / f"{clip}.mp4")})
             elif self.path == "/api/escalate":
                 ev = store.by_key.get((body.get("clip"), body.get("id")))
                 if ev is None:

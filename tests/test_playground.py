@@ -99,6 +99,21 @@ def test_inbox_status_and_event_list_reload_when_a_timeline_appears(app, tmp_pat
     assert _post(base + "/api/event", {"clip": "new", "id": 0})[0] == 200
 
 
+def test_rerun_redrops_the_clip_into_the_inbox(app, tmp_path):
+    base, _ = app
+    (tmp_path / "porch.mp4").write_bytes(b"transcoded copy")
+    status, out = _post(base + "/api/rerun", {"clip": "porch"})
+    assert status == 200 and out["queued"] == "porch"
+    assert (tmp_path / "inbox" / "porch.mp4").read_bytes() == b"transcoded copy"   # copied from samples
+    before = (tmp_path / "inbox" / "porch.mp4").stat().st_mtime
+    import os
+    os.utime(tmp_path / "inbox" / "porch.mp4", (before - 100, before - 100))
+    assert _post(base + "/api/rerun", {"clip": "porch"})[0] == 200
+    assert (tmp_path / "inbox" / "porch.mp4").stat().st_mtime > before - 100   # touched, not re-copied
+    assert _post(base + "/api/rerun", {"clip": "missing"})[0] == 404
+    assert _post(base + "/api/rerun", {"clip": "../porch"})[0] == 404
+
+
 def test_upload_is_refused_when_the_inbox_is_off(tmp_path, fake_decider):
     url, _ = fake_decider
     srv, base = _serve(playground.make_handler(url, tmp_path, None))

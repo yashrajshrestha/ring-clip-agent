@@ -5,8 +5,10 @@
 Polls the folder. A new video whose size has stopped changing between two
 polls is transcoded, analysed (OpenCV, detector), decided (Decider 2B when
 DECIDER_URL is set, else the rule stub; recheck and escalation as configured)
-and written to the samples folder, where the playground picks it up. Status
-is kept in <out>/inbox.json. The playground runs this watcher in a thread, so
+and written to the samples folder, where the playground picks it up. A file
+touched or replaced after its timeline was written is processed again, which
+is how the playground's Re-run button works. Status is kept in
+<out>/inbox.json. The playground runs this watcher in a thread, so
 `python -m vision.playground` alone gives a working drop box.
 """
 from __future__ import annotations
@@ -27,12 +29,13 @@ class Inbox:
         self.inbox, self.out_dir, self.detector, self.interval = Path(inbox), Path(out_dir), detector, interval
         self.inbox.mkdir(parents=True, exist_ok=True)
         self.out_dir.mkdir(parents=True, exist_ok=True)
-        self.status: dict = {"processing": None, "queue": [], "done": [], "errors": {}}
+        # finished: stem -> time it last completed, so a page can tell a re-run apart from an old run
+        self.status: dict = {"processing": None, "queue": [], "done": [], "finished": {}, "errors": {}}
         self._sizes: dict[str, int] = {}   # last seen size per file, to wait out a copy in progress
         self._write_status()
 
     def _write_status(self) -> None:
-        (self.out_dir / "inbox.json").write_text(json.dumps(self.status))
+        (self.out_dir / "inbox.json").write_text(json.dumps({**self.status, "now": time.time()}))
 
     def pending(self) -> list[Path]:
         """Videos with no timeline yet, or changed since their timeline was written."""
@@ -66,7 +69,9 @@ class Inbox:
             self._write_status()
             try:
                 process_clip(p, self.out_dir, self.detector)
-                self.status["done"].append(p.stem)
+                if p.stem not in self.status["done"]:
+                    self.status["done"].append(p.stem)
+                self.status["finished"][p.stem] = time.time()
                 self.status["errors"].pop(p.stem, None)
                 done.append(p.stem)
             except Exception as e:  # noqa: BLE001  one bad file must not stop the watcher

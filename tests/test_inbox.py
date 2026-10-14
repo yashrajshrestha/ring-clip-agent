@@ -39,7 +39,21 @@ def test_waits_until_the_file_stops_growing_then_processes_it(box):
     assert [r["name"] for r in json.loads((box.out_dir / "index.json").read_text())] == ["porch"]
     status = json.loads((box.out_dir / "inbox.json").read_text())
     assert status["done"] == ["porch"] and status["queue"] == [] and status["errors"] == {}
+    assert status["finished"]["porch"] <= status["now"]
     assert box.poll() == []                      # nothing new
+
+
+def test_a_touched_file_is_processed_again(box):
+    import os
+    import time
+    _write_clip(box.inbox / "porch.mp4")
+    box.poll(), box.poll()
+    first = json.loads((box.out_dir / "inbox.json").read_text())["finished"]["porch"]
+    later = time.time() + 5
+    os.utime(box.inbox / "porch.mp4", (later, later))   # what the Re-run button does
+    assert box.poll() == ["porch"]
+    status = json.loads((box.out_dir / "inbox.json").read_text())
+    assert status["finished"]["porch"] > first and status["done"] == ["porch"]
 
 
 def test_ignores_non_videos_and_hidden_files(box):

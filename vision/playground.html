@@ -40,6 +40,7 @@ textarea { min-height: 96px; resize: vertical; }
 .opt { display: grid; grid-template-columns: 130px minmax(0, 1fr) 30px; gap: 6px; margin-bottom: 6px; }
 .opt.level { grid-template-columns: minmax(0, 1fr) 30px; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row > select { flex: 1; width: auto; min-width: 0; }
 .btn { font: inherit; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
 .btn.primary { background: var(--info); border-color: var(--info); color: #fff; }
 .btn:disabled { opacity: .55; cursor: wait; }
@@ -97,7 +98,7 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
     <div class="card">
       <div class="row">
         <label for="preset" style="margin:0">Preset</label>
-        <select id="preset" style="width:auto"></select>
+        <select id="preset" style="width:auto;flex:0 1 auto"></select>
       </div>
       <label for="state">State: what the decider knows</label>
       <textarea id="state"></textarea>
@@ -126,7 +127,10 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
   <section id="tab-events" class="grid" hidden>
     <div class="card">
       <h2>Real events from your analysed clips</h2>
-      <select id="clip"></select>
+      <div class="row">
+        <select id="clip"></select>
+        <button class="btn" id="rerun" type="button" title="Analyse and decide this clip again from scratch">Re-run</button>
+      </div>
       <div class="drop" id="drop">
         <input type="file" id="file" accept="video/*" hidden>
         <b>Drop a clip here</b> or <button class="btn" id="choose" type="button">choose a file</button>
@@ -353,32 +357,48 @@ async function loadEvents(selectClip) {
   renderEvents();
 }
 
-// Drop box: upload into the inbox, then watch the inbox status until the clip is analysed.
+// Drop box and Re-run: both hand a file to the inbox watcher, then watch its status until the clip is (re)done.
 let inboxTimer;
 function inboxMsg(text, isError) { const m = $("inboxmsg"); m.textContent = text; m.className = "inboxmsg" + (isError ? " error" : " muted"); }
+async function inboxNow() { try { return (await (await fetch("/api/inbox")).json()).now || 0; } catch { return 0; } }
+function watchInbox(stem, since, verb) {
+  const t0 = Date.now();
+  clearInterval(inboxTimer);
+  $("rerun").disabled = true;
+  inboxTimer = setInterval(async () => {
+    const s = await (await fetch("/api/inbox")).json();
+    const secs = Math.round((Date.now() - t0) / 1000);
+    if (s.errors && s.errors[stem]) { clearInterval(inboxTimer); $("rerun").disabled = false; return inboxMsg(`${stem}: ${s.errors[stem]}`, true); }
+    if (s.finished && s.finished[stem] >= since) {
+      clearInterval(inboxTimer);
+      $("rerun").disabled = false;
+      await loadEvents(stem);
+      const n = EVENTS.filter((e) => e.clip === stem).length;
+      return inboxMsg(`${stem}: done in ${secs} s, ${n} event${n === 1 ? "" : "s"} decided. Click one below.`);
+    }
+    inboxMsg(s.processing === stem ? `${verb} ${stem}: OpenCV, detector, decider… ${secs} s`
+           : `${stem} is queued${s.processing ? ` behind ${s.processing}` : ""}… ${secs} s`);
+  }, 2000);
+}
 async function upload(file) {
   if (!file) return;
   if (!/\.(mp4|mov|mkv|avi)$/i.test(file.name)) return inboxMsg(`${file.name}: not a video file (mp4, mov, mkv, avi).`, true);
   inboxMsg(`Uploading ${file.name} (${(file.size / 1048576).toFixed(1)} MB)…`);
+  const since = await inboxNow();
   const r = await fetch(`/api/upload?name=${encodeURIComponent(file.name)}`, { method: "PUT", body: file });
   const data = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
   if (!r.ok) return inboxMsg(data.error, true);
-  const t0 = Date.now();
-  clearInterval(inboxTimer);
-  inboxTimer = setInterval(async () => {
-    const s = await (await fetch("/api/inbox")).json();
-    const secs = Math.round((Date.now() - t0) / 1000);
-    if (s.errors && s.errors[data.name]) { clearInterval(inboxTimer); return inboxMsg(`${data.name}: ${s.errors[data.name]}`, true); }
-    if (s.done && s.done.includes(data.name)) {
-      clearInterval(inboxTimer);
-      await loadEvents(data.name);
-      const n = EVENTS.filter((e) => e.clip === data.name).length;
-      return inboxMsg(`${data.name}: done in ${secs} s, ${n} event${n === 1 ? "" : "s"} decided. Click one below.`);
-    }
-    inboxMsg(s.processing === data.name ? `Analysing ${data.name}: OpenCV, detector, decider… ${secs} s`
-           : `${data.name} is queued${s.processing ? ` behind ${s.processing}` : ""}… ${secs} s`);
-  }, 2000);
+  watchInbox(data.name, since, "Analysing");
 }
+$("rerun").onclick = async () => {
+  const clip = $("clip").value;
+  if (!clip || !EVENTS.some((e) => e.clip === clip)) return;
+  inboxMsg(`Queuing ${clip} for a fresh run…`);
+  const since = await inboxNow();
+  const r = await post("/api/rerun", { clip });
+  if (!r.ok) return inboxMsg(r.data.error, true);
+  watchInbox(clip, since, "Re-running");
+};
 const drop = $("drop");
 ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
@@ -408,7 +428,7 @@ checkHealth();
 setInterval(checkHealth, 15000);
 loadEvents();
 $("clip").onchange = renderEvents;
-fetch("/api/inbox").then((r) => r.json()).then((s) => { if (!s.enabled) { drop.hidden = true; } }).catch(() => {});
+fetch("/api/inbox").then((r) => r.json()).then((s) => { if (!s.enabled) { drop.hidden = true; $("rerun").hidden = true; } }).catch(() => {});
 </script>
 </body>
 </html>
