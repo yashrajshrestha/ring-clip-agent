@@ -242,6 +242,18 @@ def make_handler(url: str, samples: Path, inbox: Path | None = None):
                 # `since`: the page waits for a finish time later than this, so an old run cannot satisfy it
                 self._send(200, {"queued": clip, "profile": profile, "source": str(src or samples / f"{clip}.mp4"),
                                  "since": time.time()})
+            elif self.path == "/api/cancel":
+                # Ask the watcher to stop the clip it is working on; it checks between steps.
+                clip = str(body.get("clip", ""))
+                if inbox is None:
+                    return self._send(503, {"error": "the inbox is disabled on this server"})
+                status_file = samples / "inbox.json"
+                current = json.loads(status_file.read_text()).get("processing") if status_file.exists() else None
+                if not clip or clip != current:
+                    return self._send(409, {"error": f"{clip or 'that clip'} is not being processed right now"})
+                inbox.mkdir(parents=True, exist_ok=True)
+                (inbox / f"{clip}.cancel").write_text("")
+                self._send(200, {"cancelling": clip})
             elif self.path == "/api/escalate":
                 ev = store.by_key.get((body.get("clip"), body.get("id")))
                 if ev is None:

@@ -122,6 +122,15 @@ def test_rerun_redrops_the_clip_into_the_inbox(app, tmp_path):
     assert json.loads(_get(base + "/api/events")[1])[0]["profile"] == "normal"
 
 
+def test_cancel_only_the_clip_being_processed(app, tmp_path):
+    base, _ = app
+    (tmp_path / "inbox.json").write_text(json.dumps({"processing": "porch", "queue": [], "done": [], "errors": {}}))
+    assert _post(base + "/api/cancel", {"clip": "other"})[0] == 409
+    status, out = _post(base + "/api/cancel", {"clip": "porch"})
+    assert status == 200 and out == {"cancelling": "porch"}
+    assert (tmp_path / "inbox" / "porch.cancel").exists()
+
+
 def test_upload_is_refused_when_the_inbox_is_off(tmp_path, fake_decider):
     url, _ = fake_decider
     srv, base = _serve(playground.make_handler(url, tmp_path, None))

@@ -96,6 +96,22 @@ def test_progress_is_reported_through_the_stages(box, monkeypatch):
     assert json.loads((box.out_dir / "inbox.json").read_text())["progress"] is None   # cleared when done
 
 
+def test_cancel_flag_stops_a_run_and_keeps_the_old_results(box):
+    import os, time
+    _write_clip(box.inbox / "porch.mp4")
+    box.poll(), box.poll()
+    tl = box.out_dir / "porch.timeline.json"
+    old = tl.read_text()
+    later = time.time() + 5
+    os.utime(box.inbox / "porch.mp4", (later, later))      # queued again, as a Re-run would
+    (box.inbox / "porch.cancel").write_text("")            # what the Cancel button writes
+    assert box.poll() == []                                # stopped, not finished
+    status = json.loads((box.out_dir / "inbox.json").read_text())
+    assert "porch" in status["cancelled"] and status["processing"] is None
+    assert tl.read_text() == old                           # previous results untouched
+    assert not (box.inbox / "porch.cancel").exists() and box.pending() == []   # not picked up again
+
+
 def test_ignores_non_videos_and_hidden_files(box):
     (box.inbox / "notes.txt").write_text("x")
     (box.inbox / ".porch.mp4.part").write_bytes(b"xx")

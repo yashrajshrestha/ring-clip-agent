@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import threading
 import time
@@ -25,6 +26,10 @@ from pathlib import Path
 
 from .profiles import PROFILES
 from .timeline import VIDEO_EXT, load_detector, process_clip
+
+
+class Cancelled(Exception):
+    """Raised from the progress callback when a <clip>.cancel file appears."""
 
 
 class Inbox:
@@ -67,6 +72,14 @@ class Inbox:
         sidecar.unlink()
         return name if name in PROFILES else "normal"
 
+    def _mark_handled(self, p: Path) -> None:
+        """Leave the clip's timeline as it is (or create an empty marker) and date it
+        after the clip file, so pending() does not pick the clip up again."""
+        tl = self.out_dir / f"{p.stem}.timeline.json"
+        tl.touch()
+        stamp = max(time.time(), p.stat().st_mtime) + 1
+        os.utime(tl, (stamp, stamp))
+
     def poll(self) -> list[str]:
         """One pass: process every stable pending clip. Returns the names processed."""
         pending = self.pending()
@@ -81,11 +94,16 @@ class Inbox:
             self.status["progress"] = {"stage": "convert", "done": 0, "total": 1}
             self._write_status()
             last = [0.0]
+            cancel_flag = self.inbox / f"{p.stem}.cancel"
 
             def progress(stage: str, done: int, total: int) -> None:
+                if cancel_flag.exists():   # the page's Cancel button writes this; stop at the next step
+                    raise Cancelled(p.stem)
                 self.status["progress"] = {"stage": stage, "done": done, "total": total}
                 if stage != "analyse" or time.time() - last[0] > 0.5:   # frames tick fast; don't rewrite the file each time
                     last[0] = time.time()
+                    # clips dropped while this one runs show up as waiting straight away
+                    self.status["queue"] = [q.stem for q in self.pending() if q.stem != p.stem]
                     self._write_status()
 
             try:
@@ -95,11 +113,16 @@ class Inbox:
                 self.status["finished"][p.stem] = time.time()
                 self.status["errors"].pop(p.stem, None)
                 done.append(p.stem)
+            except Cancelled:
+                # Keep the previous results; mark the clip handled so it is not picked up again.
+                cancel_flag.unlink(missing_ok=True)
+                self._mark_handled(p)
+                self.status.setdefault("cancelled", {})[p.stem] = time.time()
             except Exception as e:  # noqa: BLE001  one bad file must not stop the watcher
                 self.status["errors"][p.stem] = f"{type(e).__name__}: {e}"
                 traceback.print_exc()
                 # mark it handled so the same broken file is not retried every poll
-                (self.out_dir / f"{p.stem}.timeline.json").touch()
+                self._mark_handled(p)
             self.status["processing"] = None
             self.status["progress"] = None
             self._write_status()
