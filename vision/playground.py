@@ -52,8 +52,11 @@ def load_events(samples: Path) -> list[dict]:
                 "profile": tl.get("profile", "normal"),
                 "t_start": ev["t_start"], "t_end": ev["t_end"], "say": ev.get("say"),
                 "decision": ev.get("decision"),
+                "first_decision": ev.get("first_decision"),
+                "decider_decision": ev.get("decider_decision"),
                 "rule": {"action": rule["action"], "reason": rule["reason"]},
                 "request": decider.request(ev, events[:n]),
+                "state": decider.state_text(ev, events[:n]),   # what the decider read, shown without a live call
                 "raw": {"ev": ev, "earlier": events[:n]},
             })
     return out

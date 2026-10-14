@@ -312,32 +312,53 @@ function renderEvents() {
   }).join("") || `<li class="muted">No events in this clip.</li>`;
   $("evlist").querySelectorAll("li[data-id]").forEach((li) => li.onclick = () => runEvent(clip, Number(li.dataset.id), li));
 }
-async function runEvent(clip, id, li) {
-  $("evlist").querySelectorAll("li").forEach((x) => x.classList.toggle("sel", x === li));
-  const ev = EVENTS.find((e) => e.clip === clip && e.id === id);
-  if (ev) { const v = $("video"); v.currentTime = Math.max(0, ev.t_start - 0.5); v.play().catch(() => {}); }
-  waiting($("evout"), "Decider vs rules");
-  const { ok, data } = await post("/api/event", { clip, id });
-  clearInterval(timer);
-  const rule = data.rule || EVENTS.find((e) => e.clip === clip && e.id === id)?.rule;
-  const ans = data.response?.answers?.action;
-  const same = ans && rule && ans.choice === rule.action;
-  $("evout").innerHTML = `<h2>Decider vs rules</h2>
-    <div class="state">${esc(data.request?.state ?? "")}</div>
+// Render the panel from a decision: either the one saved during the run (instant) or a live answer.
+function renderDecision(clip, id, ev, d, meta) {
+  const rule = ev.rule;
+  const same = d && rule && d.action === rule.action;
+  const isDecider = d && d.source && d.source.startsWith("strands-decider");
+  const conf = d && d.confidence != null ? `Confidence ${(d.confidence * 100).toFixed(0)}%` : "";
+  const took = d && d.ms ? ` · ${(d.ms / 1000).toFixed(1)} s` : "";
+  const prior = ev.first_decision && ev.first_decision !== d ? `<div class="muted" style="font-size:13px;margin-top:4px">First answer, before the recheck: ${esc(ev.first_decision.action)}${ev.first_decision.confidence != null ? ` (${Math.round(ev.first_decision.confidence * 100)}%)` : ""}</div>` : "";
+  const escalated = ev.decider_decision ? `<div class="muted" style="font-size:13px;margin-top:4px">Decider said ${esc(ev.decider_decision.action)} at ${Math.round(ev.decider_decision.confidence * 100)}%; the vision model overrode it.</div>` : "";
+  $("evout").innerHTML = `<h2>Decider vs rules <span class="muted" style="font-weight:400;font-size:13px">· ${esc(meta)}</span></h2>
+    <div class="state">${esc(ev.state ?? "")}</div>
     <div class="vs">
       <div><div class="muted" style="font-size:13px">Rules</div>
-        <div class="answer"><span class="pill ${esc(rule?.action)}">${esc(rule?.action)}</span></div>
-        <div class="muted" style="font-size:13px">${esc(rule?.reason)}</div></div>
-      <div><div class="muted" style="font-size:13px">Strands Decider 2B</div>
-        ${ok && ans ? `<div class="answer"><span class="pill ${esc(ans.choice)}">${esc(ans.choice)}</span></div>
-          <div class="muted" style="font-size:13px">Confidence ${(ans.confidence * 100).toFixed(0)}% · ${(data.ms / 1000).toFixed(1)} s</div>`
-        : `<p class="error">${esc(data.error || "No answer")}</p>`}</div>
+        <div class="answer"><span class="pill ${esc(rule.action)}">${esc(rule.action)}</span></div>
+        <div class="muted" style="font-size:13px">${esc(rule.reason)}</div></div>
+      <div><div class="muted" style="font-size:13px">${isDecider ? "Strands Decider 2B" : esc(d?.source || "decision")}</div>
+        ${d ? `<div class="answer"><span class="pill ${esc(d.action)}">${esc(d.action)}</span></div>
+          <div class="muted" style="font-size:13px">${conf}${took}</div>${prior}${escalated}` : `<p class="muted">No saved decision.</p>`}</div>
     </div>
-    ${ok && ans ? `<p class="verdict ${same ? "same" : "diff"}">${same ? "Same call as the rules." : "Different call from the rules."}</p>${bars(ans.probabilities, ans.choice)}` : ""}
-    <div class="row" style="margin-top:12px"><button class="btn" id="askvl" type="button">Ask the vision model</button>
-      <span class="muted" style="font-size:13px">${ok && ans && ans.confidence < 0.4 ? "Low confidence: the pipeline would escalate this one." : "The pipeline escalates only when confidence is under 40%."}</span></div>
+    ${d ? `<p class="verdict ${same ? "same" : "diff"}">${same ? "Same call as the rules." : "Different call from the rules."}</p>${d.probabilities ? bars(d.probabilities, d.action) : ""}` : ""}
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="askagain" type="button" title="Send the same state to the decider now and watch it answer">Ask the decider again (live)</button>
+      <button class="btn" id="askvl" type="button">Ask the vision model</button>
+      <span class="muted" style="font-size:13px">${d && d.confidence != null && d.confidence < 0.4 ? "Low confidence: the pipeline would escalate this one." : "The pipeline escalates only when confidence is under 40%."}</span></div>
     <div id="vlout"></div>
-    <details><summary>Request and response JSON</summary><pre>${esc(JSON.stringify({ request: data.request, response: data.response ?? data }, null, 2))}</pre></details>`;
+    <details><summary>Saved event JSON</summary><pre>${esc(JSON.stringify({ event: { ...ev, state: undefined }, state: ev.state }, null, 2))}</pre></details>`;
+  $("askagain").onclick = async () => {
+    const btn = $("askagain");
+    btn.disabled = true;
+    waiting($("evout"), "Decider vs rules");
+    const { ok, data } = await post("/api/event", { clip, id });
+    clearInterval(timer);
+    const ans = data.response?.answers?.action;
+    if (!ok || !ans) { renderDecision(clip, id, ev, d, meta); $("vlout").innerHTML = `<p class="error">${esc(data.error || "No answer")}</p>`; return; }
+    renderDecision(clip, id, ev, { action: ans.choice, source: "strands-decider-2b", confidence: ans.confidence,
+                                   probabilities: ans.probabilities, ms: data.ms }, `live answer just now`);
+  };
+  bindVisionButton(clip, id);
+}
+function runEvent(clip, id, li) {
+  $("evlist").querySelectorAll("li").forEach((x) => x.classList.toggle("sel", x === li));
+  const ev = EVENTS.find((e) => e.clip === clip && e.id === id);
+  if (!ev) return;
+  const v = $("video"); v.currentTime = Math.max(0, ev.t_start - 0.5); v.play().catch(() => {});
+  renderDecision(clip, id, ev, ev.decision, ev.decision ? "saved from the run" : "no decision saved");
+}
+function bindVisionButton(clip, id) {
   $("askvl").onclick = async () => {
     const btn = $("askvl"), out = $("vlout"), t0 = Date.now();
     btn.disabled = true;
