@@ -90,7 +90,8 @@ class Inbox:
             if not self._stable(p):
                 continue
             self.status["processing"] = p.stem
-            self.status["queue"] = [q.stem for q in pending if q != p]
+            # from disk, not the snapshot above: clips finished earlier in this pass are no longer waiting
+            self.status["queue"] = [q.stem for q in self.pending() if q != p]
             self.status["progress"] = {"stage": "convert", "done": 0, "total": 1}
             self._write_status()
             last = [0.0]

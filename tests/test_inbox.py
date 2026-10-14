@@ -112,6 +112,23 @@ def test_cancel_flag_stops_a_run_and_keeps_the_old_results(box):
     assert not (box.inbox / "porch.cancel").exists() and box.pending() == []   # not picked up again
 
 
+def test_finished_clips_leave_the_waiting_list(box, monkeypatch):
+    queues = []
+    real_write = box._write_status
+
+    def spy():
+        if box.status.get("processing"):
+            queues.append((box.status["processing"], list(box.status["queue"])))
+        real_write()
+
+    monkeypatch.setattr(box, "_write_status", spy)
+    _write_clip(box.inbox / "a.mp4")
+    _write_clip(box.inbox / "b.mp4")
+    box.poll(), box.poll()
+    while_b = [q for proc, q in queues if proc == "b"]
+    assert while_b and all("a" not in q for q in while_b)   # a is done, so it is not shown as waiting
+
+
 def test_ignores_non_videos_and_hidden_files(box):
     (box.inbox / "notes.txt").write_text("x")
     (box.inbox / ".porch.mp4.part").write_bytes(b"xx")
