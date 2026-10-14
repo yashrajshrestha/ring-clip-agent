@@ -50,6 +50,7 @@ def test_unreachable_server_falls_back():
 def test_sends_one_choice_question_with_earlier_events(fake_server):
     url, seen = fake_server
     out = decider.decide(TAKEN, [PERSON], url=url)
+    assert 0 <= out.pop("ms") < 5000   # round-trip time, shown in the UI
     assert out == {"action": "alert", "reason": decider.REASONS["alert"], "source": decider.SOURCE,
                    "confidence": 0.8, "probabilities": {"alert": 0.9, "ignore": 0.1}}
     q = seen[0]["questions"]["action"]

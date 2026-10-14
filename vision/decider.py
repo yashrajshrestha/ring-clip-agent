@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 
@@ -104,6 +105,7 @@ def decide(ev: dict, earlier: list[dict], url: str | None = None) -> dict | None
     url = url or os.environ.get("DECIDER_URL")
     if not url:
         return None
+    started = time.perf_counter()
     try:
         ans = ask(request(ev, earlier), url)["answers"]["action"]
     except (urllib.error.URLError, TimeoutError, KeyError, ValueError):
@@ -117,4 +119,5 @@ def decide(ev: dict, earlier: list[dict], url: str | None = None) -> dict | None
         "source": SOURCE,
         "confidence": ans.get("confidence"),
         "probabilities": ans.get("probabilities"),
+        "ms": round((time.perf_counter() - started) * 1000),   # round trip, so the UI can show how long it took
     }

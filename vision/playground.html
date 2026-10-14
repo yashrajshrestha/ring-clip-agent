@@ -300,7 +300,8 @@ function renderEvents() {
   $("evlist").innerHTML = mine.map((e) => {
     const d = e.decision || e.rule;
     const src = e.decision ? e.decision.source : "rule-stub";
-    const conf = e.decision && e.decision.confidence != null ? ` · ${Math.round(e.decision.confidence * 100)}% sure` : "";
+    const conf = (e.decision && e.decision.confidence != null ? ` · ${Math.round(e.decision.confidence * 100)}% sure` : "")
+               + (e.decision && e.decision.ms ? ` · ${(e.decision.ms / 1000).toFixed(1)} s` : "");
     return `
     <li data-id="${e.id}"><div class="row" style="justify-content:space-between">
       <span>${esc(e.say || e.type)} ${e.label ? `<span class="muted">(${esc(e.label)})</span>` : ""}</span>
@@ -377,8 +378,11 @@ function watchInbox(stem, since, verb) {
       clearInterval(inboxTimer);
       setBusy(false);
       await loadEvents(stem);
-      const n = EVENTS.filter((e) => e.clip === stem).length;
-      return inboxMsg(`${stem}: done in ${secs} s, ${n} event${n === 1 ? "" : "s"} decided. Click one below.`);
+      const mine = EVENTS.filter((e) => e.clip === stem);
+      const n = mine.length;
+      const deciderS = mine.reduce((t, e) => t + ((e.decision && e.decision.ms) || 0), 0) / 1000;
+      return inboxMsg(`${stem}: done in ${secs} s, ${n} event${n === 1 ? "" : "s"} decided` +
+                      (deciderS ? `, the decider took ${deciderS.toFixed(1)} s of that` : "") + `. Click one below.`);
     }
     inboxMsg(s.processing === stem ? `${verb} ${stem}: OpenCV, detector, decider… ${secs} s`
            : `${stem} is queued${s.processing ? ` behind ${s.processing}` : ""}… ${secs} s`);
