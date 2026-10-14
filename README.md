@@ -9,6 +9,18 @@ OpenCV 5 clip quality and event checks for Ring-style doorbell video, feeding a 
     pytest
     python -m vision.cli path/to/clips > facts.jsonl
 
+## Drop box
+
+Drop any clip into `clips/inbox/` (or onto the playground page) and it is transcoded, analysed with
+OpenCV, decided event by event (Decider 2B when `DECIDER_URL` is set, with recheck and escalation as
+configured) and added to the clip list, usually within a minute on a laptop:
+
+    DECIDER_URL=http://127.0.0.1:8000 DECIDER_TIMEOUT=300 python -m vision.playground
+    cp some_clip.mp4 clips/inbox/        # or drag it onto the page
+
+`python -m vision.inbox` runs the watcher on its own; `--no-inbox` turns it off in the playground.
+Status is in `web/public/samples/inbox.json`.
+
 ## Decider playground
 
 Ask Strands Decider 2B any typed question (`choice`, `noul` or `score`), or replay a real event
