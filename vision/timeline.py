@@ -39,6 +39,9 @@ IR_HOLD_S = 5.0         # seconds a day/night reading must hold without a frame 
 STILL_SHARE = 0.998      # share of pixels unchanged frame to frame = a frozen still; measured: end cards 1.0, night footage 0.99 max
 REPAINT_GAP_S = 0.5      # a quality run starting this soon after a cut or mode switch may be an edit
 PERSON_AREA = 0.03       # rule-stub: peak motion at least this big reads as a person
+ZOOM_MOTION = False      # harder profile: also run the detector on a crop around the moving region
+ZOOM_GROW = 2.0          # crop is this many times the motion box on each side...
+ZOOM_MIN_SHARE = 0.4     # ...and at least this share of the frame, so the crop is not tiny
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".avi"}
 
 
@@ -58,6 +61,26 @@ def to_browser_mp4(src: Path, dst: Path) -> None:
          "-c:a", "aac", "-movflags", "+faststart", str(dst)],
         check=True,
     )
+
+
+def zoomed_detect(detector, frame: np.ndarray, box: list[float]) -> list[dict]:
+    """Run the detector on a crop around the motion box and map the boxes back
+    to frame fractions. The detector letterboxes to 640, so a figure that fills
+    a fifth of the frame arrives two to three times larger this way."""
+    h, w = frame.shape[:2]
+    bx, by, bw, bh = box
+    cw, ch = min(1.0, max(bw * ZOOM_GROW, ZOOM_MIN_SHARE)), min(1.0, max(bh * ZOOM_GROW, ZOOM_MIN_SHARE))
+    x0 = min(max(bx + bw / 2 - cw / 2, 0.0), 1.0 - cw)
+    y0 = min(max(by + bh / 2 - ch / 2, 0.0), 1.0 - ch)
+    crop = frame[round(y0 * h):round((y0 + ch) * h), round(x0 * w):round((x0 + cw) * w)]
+    if crop.size == 0:
+        return []
+    out = []
+    for o in detector.detect(crop):
+        ox, oy, ow, oh = o["box"]
+        out.append({**o, "box": [round(x0 + ox * cw, 4), round(y0 + oy * ch, 4), round(ow * cw, 4), round(oh * ch, 4)],
+                    "zoomed": True})
+    return out
 
 
 def _box(contour, w: int, h: int) -> list[float]:
@@ -260,6 +283,8 @@ def build_timeline(path: str | Path, detector=None) -> dict:
         if detector is not None and box is not None:
             if i - last_det >= det_every:
                 last_objs, last_det = detector.detect(small), i
+                if ZOOM_MOTION:
+                    last_objs = last_objs + zoomed_detect(detector, small, box)
             objs = last_objs
         else:
             last_det = -det_every

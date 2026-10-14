@@ -17,6 +17,7 @@ PROFILES: dict[str, dict] = {
     "harder": {
         "detector_conf": 0.35,              # the zoo default; normal uses 0.5 (bags scored "person 0.41")
         "timeline.DETECT_HZ": 4,
+        "timeline.ZOOM_MOTION": True,       # detector also runs on a crop around the moving region
         "enhance.TARGET_MEAN": 130.0,
         "enhance.GAMMA_MAX": 4.0,
         "enhance.RECHECK_FRAMES": 16,
