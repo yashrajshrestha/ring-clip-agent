@@ -67,12 +67,15 @@ plus a plain-text state (the event, what the detector saw, the last three events
 ## Evaluation
 
 18 labelled doorbell clips (deliveries and thefts, 4 at night), all 132 events decided by Decider 2B:
-17 of 18 clips raised at least one alert (the miss is a late-night delivery where the detector never labelled
-the courier and the decider read a 1.3 s person-sized blob as "ignore"); the package being left or taken was
-detected in 11 of 18 (the known weak spot: the detector has no "box" class, so this relies on comparing the
-doorstep before and after). Mean confidence 68%; 13 of 132 events fell under the 40% escalation line; 87 of
-132 events were alerts, so the language model would run for two thirds of events and never for the rest.
-Agreement with a hand-written rule baseline: 123 of 132. `eval/report.md` names every failure.
+18 of 18 clips raised at least one alert. The last one to fall in line was a late-night delivery where the
+detector never labelled the courier: OpenCV now tracks a person-sized blob that moves steadily across the
+frame and tells the decider so ("a person-sized shape moved steadily across the porch, which the detector could
+not identify"), which turned that clip from "ignore 52%" into "alert 27%", low confidence by design, and so a
+candidate for the vision model. The package being left or taken was detected in 11 of 18 (the known weak spot:
+the detector has no "box" class, so this relies on comparing the doorstep before and after). Mean confidence
+68%; 13 of 132 events fell under the 40% escalation line; 92 of 132 events were alerts, so the language model
+would run for seven events in ten and never for the rest. Agreement with a hand-written rule baseline: 124 of
+132. `eval/report.md` names every failure.
 
 ## What's next
 
