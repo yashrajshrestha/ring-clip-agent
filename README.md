@@ -21,6 +21,12 @@ configured) and added to the clip list, usually within a minute on a laptop:
 `python -m vision.inbox` runs the watcher on its own; `--no-inbox` turns it off in the playground.
 Status is in `web/public/samples/inbox.json`.
 
+**Re-run** sends the selected clip through the pipeline again. **Look harder** does the same with the
+`harder` profile (`vision/profiles.py`): detector at 0.35 instead of 0.5, 4 detector passes a second,
+stronger brightening, more frames per recheck and the zoomed second look on every recheck. It takes
+2–4× longer and finds small, dim or partly hidden figures the normal pass misses, at the price of a few
+more false positives, which is why it is a button and not the default.
+
 ## Decider playground
 
 Ask Strands Decider 2B any typed question (`choice`, `noul` or `score`), or replay a real event
