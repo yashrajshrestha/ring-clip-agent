@@ -393,13 +393,23 @@ async function upload(file) {
   if (!r.ok) return inboxMsg(data.error, true);
   watchInbox(data.name, data.since || 0, "Analysing");   // server time of the request, not the status file's clock
 }
+function clearResults(stem, verb) {
+  // A fresh run starts from a clean slate: old events and the old decision panel go, the video rewinds.
+  EVENTS = EVENTS.filter((e) => e.clip !== stem);
+  $("evlist").innerHTML = `<li class="muted">${esc(verb)} ${esc(stem)}: previous results cleared. New events appear here when it finishes.</li>`;
+  $("evout").innerHTML = `<h2>Decider vs rules</h2><p class="muted">Waiting for the fresh run of ${esc(stem)}…</p>`;
+  $("proftag").hidden = true;
+  const v = $("video"); v.pause(); v.currentTime = 0;
+}
 async function rerun(profile) {
   const clip = $("clip").value;
   if (!clip || !EVENTS.some((e) => e.clip === clip)) return;
   inboxMsg(`Queuing ${clip} for a fresh ${profile === "harder" ? "harder " : ""}run…`);
   const r = await post("/api/rerun", { clip, profile });
   if (!r.ok) return inboxMsg(r.data.error, true);
-  watchInbox(clip, r.data.since || 0, profile === "harder" ? "Looking harder at" : "Re-running");
+  const verb = profile === "harder" ? "Looking harder at" : "Re-running";
+  clearResults(clip, verb);
+  watchInbox(clip, r.data.since || 0, verb);
 }
 $("rerun").onclick = () => rerun("normal");
 $("harder").onclick = () => rerun("harder");
