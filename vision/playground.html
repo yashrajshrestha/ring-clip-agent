@@ -378,6 +378,9 @@ function watchInbox(stem, since, verb) {
       clearInterval(inboxTimer);
       setBusy(false);
       await loadEvents(stem);
+      if (/Waiting for the fresh run/.test($("evout").textContent)) {   // placeholder from clearResults, nothing else to show yet
+        $("evout").innerHTML = `<h2>Decider vs rules</h2><p class="muted">Fresh run finished. Pick an event to see what the decider said and why.</p>`;
+      }
       const mine = EVENTS.filter((e) => e.clip === stem);
       const n = mine.length;
       const deciderS = mine.reduce((t, e) => t + ((e.decision && e.decision.ms) || 0), 0) / 1000;
