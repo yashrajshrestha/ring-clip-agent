@@ -72,12 +72,15 @@ Labelled set: 18 public doorbell clips (`eval/real_clips.csv`), 10 deliveries an
 Ring and Wyze cameras. Plus 6 free-licence stock doorstep clips (Pexels) and 5 clips with foggy, wet or smudged
 lenses. Scoring: `python -m vision.report` → `eval/report.md`.
 
-Headline (rule-stub decisions; the decider-backed numbers follow in the final version):
+Headline, all 132 events decided by Decider 2B with the plain-English state wording:
 
 | Measure | Result |
 |---|---|
-| Clips with at least one alert | 18 / 18 |
+| Clips with at least one alert | 17 / 18 (the miss: a late-night delivery, courier never labelled, 1.3 s person-sized blob read as ignore) |
 | Object left/taken detected | 11 / 18 (3 / 4 at night) |
+| Decider mean confidence; events under the 40% escalation line | 68%; 13 / 132 |
+| Events that would wake a language model (alerts) | 87 / 132 |
+| Agreement with the hand-written rule baseline | 123 / 132 |
 | False "blurry" events from edited title cards | 6 → 0 after the edited-still check |
 | Recheck rescues on 8 blurry moments (stock clips) | 7 rescued, person confirmed each time |
 | Decider vs rule baseline, 70 events, plain-English wording | agreement 30 → 65, mean confidence 47% → 69% |
