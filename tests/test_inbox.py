@@ -61,9 +61,9 @@ def test_profile_sidecar_is_used_once(box, monkeypatch):
     seen = []
     real = timeline.process_clip
 
-    def spy(clip, out_dir, detector=None, profile="normal"):
+    def spy(clip, out_dir, detector=None, profile="normal", progress=None):
         seen.append(profile)
-        return real(clip, out_dir, detector, profile)
+        return real(clip, out_dir, detector, profile, progress)
 
     monkeypatch.setattr(inbox, "process_clip", spy)
     _write_clip(box.inbox / "porch.mp4")
@@ -77,6 +77,23 @@ def test_profile_sidecar_is_used_once(box, monkeypatch):
     os.utime(box.inbox / "porch.mp4", (later, later))
     box.poll()
     assert seen == ["harder", "normal"]   # an unknown profile falls back to normal
+
+
+def test_progress_is_reported_through_the_stages(box, monkeypatch):
+    stages = []
+    real_write = box._write_status
+
+    def spy():
+        pr = box.status.get("progress")
+        if pr and (not stages or stages[-1] != pr["stage"]):
+            stages.append(pr["stage"])
+        real_write()
+
+    monkeypatch.setattr(box, "_write_status", spy)
+    _write_clip(box.inbox / "porch.mp4")
+    box.poll(), box.poll()
+    assert stages[:2] == ["convert", "analyse"] and "decide" in stages
+    assert json.loads((box.out_dir / "inbox.json").read_text())["progress"] is None   # cleared when done
 
 
 def test_ignores_non_videos_and_hidden_files(box):

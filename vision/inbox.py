@@ -78,9 +78,18 @@ class Inbox:
                 continue
             self.status["processing"] = p.stem
             self.status["queue"] = [q.stem for q in pending if q != p]
+            self.status["progress"] = {"stage": "convert", "done": 0, "total": 1}
             self._write_status()
+            last = [0.0]
+
+            def progress(stage: str, done: int, total: int) -> None:
+                self.status["progress"] = {"stage": stage, "done": done, "total": total}
+                if stage != "analyse" or time.time() - last[0] > 0.5:   # frames tick fast; don't rewrite the file each time
+                    last[0] = time.time()
+                    self._write_status()
+
             try:
-                process_clip(p, self.out_dir, self.detector, self._profile_for(p))
+                process_clip(p, self.out_dir, self.detector, self._profile_for(p), progress)
                 if p.stem not in self.status["done"]:
                     self.status["done"].append(p.stem)
                 self.status["finished"][p.stem] = time.time()
@@ -92,6 +101,7 @@ class Inbox:
                 # mark it handled so the same broken file is not retried every poll
                 (self.out_dir / f"{p.stem}.timeline.json").touch()
             self.status["processing"] = None
+            self.status["progress"] = None
             self._write_status()
         return done
 

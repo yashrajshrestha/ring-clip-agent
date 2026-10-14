@@ -63,6 +63,8 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
 .drop b { color: var(--text); }
 .drop .btn { padding: 3px 10px; font-size: 13px; }
 .inboxmsg { margin-top: 6px; font-size: 13px; min-height: 1.2em; }
+.progress { margin-top: 8px; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.pfill { height: 100%; width: 0; background: var(--info); transition: width .4s ease; }
 .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--warn); color: var(--warn); margin-left: 6px; vertical-align: middle; }
 #video { display: block; width: 100%; margin-top: 10px; border-radius: 8px; background: #000; aspect-ratio: 16 / 9; }
 .events { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; max-height: 360px; overflow: auto; }
@@ -140,6 +142,7 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
         <b>Drop a clip here</b> or <button class="btn" id="choose" type="button">choose a file</button>
         <div class="muted">OpenCV analyses it and the decider decides each event; it then appears in the list above.</div>
         <div class="inboxmsg" id="inboxmsg"></div>
+        <div class="progress" id="progress" hidden><div class="pfill" id="pfill"></div></div>
       </div>
       <video id="video" controls playsinline muted preload="metadata"></video>
       <ul class="events" id="evlist"></ul>
@@ -388,7 +391,19 @@ async function loadEvents(selectClip) {
 // Drop box, Re-run and Look harder all hand a file to the inbox watcher, then watch its status until the clip is (re)done.
 let inboxTimer;
 function inboxMsg(text, isError) { const m = $("inboxmsg"); m.textContent = text; m.className = "inboxmsg" + (isError ? " error" : " muted"); }
-function setBusy(busy) { $("rerun").disabled = busy; $("harder").disabled = busy; }
+function setBusy(busy) {
+  $("rerun").disabled = busy; $("harder").disabled = busy;
+  if (!busy) { $("pfill").style.width = "100%"; setTimeout(() => { $("progress").hidden = true; $("pfill").style.width = "0%"; }, 600); }
+}
+// Stage weights for one overall bar: converting is quick, frames and decisions take the time.
+const STAGES = { convert: [0, 5, "converting the video"], analyse: [5, 60, "OpenCV analysing frames"], decide: [65, 35, "decider deciding events"] };
+function progressOf(pr) {
+  if (!pr || !STAGES[pr.stage]) return { pct: 0, label: "starting" };
+  const [start, span, name] = STAGES[pr.stage];
+  const frac = pr.total ? Math.min(1, pr.done / pr.total) : 0;
+  const count = pr.stage === "convert" ? "" : ` ${pr.done} of ${pr.total}`;
+  return { pct: Math.round(start + span * frac), label: `${name}${count}` };
+}
 function watchInbox(stem, since, verb) {
   const t0 = Date.now();
   clearInterval(inboxTimer);
@@ -410,8 +425,16 @@ function watchInbox(stem, since, verb) {
       return inboxMsg(`${stem}: done in ${secs} s, ${n} event${n === 1 ? "" : "s"} decided` +
                       (deciderS ? `, the decider took ${deciderS.toFixed(1)} s of that` : "") + `. Click one below.`);
     }
-    inboxMsg(s.processing === stem ? `${verb} ${stem}: OpenCV, detector, decider… ${secs} s`
-           : `${stem} is queued${s.processing ? ` behind ${s.processing}` : ""}… ${secs} s`);
+    if (s.processing === stem) {
+      const { pct, label } = progressOf(s.progress);
+      $("progress").hidden = false;
+      $("pfill").style.width = `${pct}%`;
+      inboxMsg(`${verb} ${stem}: ${label} · ${pct}% · ${secs} s`);
+    } else {
+      $("progress").hidden = false;
+      $("pfill").style.width = "0%";
+      inboxMsg(`${stem} is queued${s.processing ? ` behind ${s.processing}` : ""}… ${secs} s`);
+    }
   }, 2000);
 }
 async function upload(file) {

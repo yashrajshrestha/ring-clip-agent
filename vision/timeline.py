@@ -177,11 +177,13 @@ def _mostly_inside(run: tuple[int, int], others: list[tuple[int, int]], share: f
     return covered / (e - s + 1) >= share
 
 
-def build_timeline(path: str | Path, detector=None) -> dict:
+def build_timeline(path: str | Path, detector=None, progress=None) -> dict:
     """`detector` is anything with detect(bgr) -> [{label, group, score, box}],
     normally vision.detector.Detector. None skips object labels."""
     cap = cv2.VideoCapture(str(path))
     fps = cap.get(cv2.CAP_PROP_FPS) or 15.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+    report = progress or (lambda stage, done, total: None)   # progress(stage, done, total) for the drop box bar
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
@@ -305,7 +307,10 @@ def build_timeline(path: str | Path, detector=None) -> dict:
         })
         thumbs.append(cv2.resize(masked, (160, round(160 * sh / sw)), interpolation=cv2.INTER_AREA))
         i += 1
+        if i % 15 == 0:
+            report("analyse", i, max(total_frames, i))
     cap.release()
+    report("analyse", i, i)
 
     events = _motion_events(frames, thumbs, fps, [0] + [idx for idx, _ in marks])
     for idx, kind in marks:
@@ -324,6 +329,7 @@ def build_timeline(path: str | Path, detector=None) -> dict:
 
     events.sort(key=lambda ev: ev["t_start"])
     for n, ev in enumerate(events):
+        report("decide", n, len(events))
         ev["id"] = n
         if ev["type"] == "motion":
             ev["objects"], ev["label"] = _label(ev, frames)
@@ -493,17 +499,19 @@ def load_detector():
     return None
 
 
-def process_clip(clip: Path, out_dir: Path, detector=None, profile: str = "normal") -> dict:
+def process_clip(clip: Path, out_dir: Path, detector=None, profile: str = "normal", progress=None) -> dict:
     """Transcode one clip, build and write its timeline, update index.json.
     Returns the index row. Used by the CLI and by the inbox watcher.
     `profile` picks how hard OpenCV looks (see vision/profiles.py)."""
     from .profiles import active
     out_dir.mkdir(parents=True, exist_ok=True)
     video = out_dir / f"{clip.stem}.mp4"
+    if progress:
+        progress("convert", 0, 1)
     to_browser_mp4(clip, video)
     started = time.perf_counter()
     with active(profile, detector):
-        tl = build_timeline(video, detector)
+        tl = build_timeline(video, detector, progress)
     tl["clip"], tl["video"], tl["profile"] = clip.name, video.name, profile
     tl["process_seconds"] = round(time.perf_counter() - started, 2)
     (out_dir / f"{clip.stem}.timeline.json").write_text(json.dumps(tl))
