@@ -10,12 +10,11 @@
   --alert: #d43c3c; --warn: #c98a0b; --info: #2f6fd6; --ok: #1f9d55;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0f1115; --panel: #171a21; --text: #e8eaee; --muted: #9099a8; --line: #2a2f3a;
-    --alert: #ef5b5b; --warn: #e0a526; --info: #5b93f0; --ok: #3cc47c;
-    color-scheme: dark;
-  }
+/* Dark is the default; data-theme="light" on <html> switches, and the header button remembers the choice. */
+:root:not([data-theme="light"]) {
+  --bg: #0f1115; --panel: #171a21; --text: #e8eaee; --muted: #9099a8; --line: #2a2f3a;
+  --alert: #ef5b5b; --warn: #e0a526; --info: #5b93f0; --ok: #3cc47c;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -87,7 +86,10 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
       <h1>Decider Playground</h1>
       <p class="sub">Ask Strands Decider 2B a typed question and see its choice, probabilities and confidence.</p>
     </div>
-    <span class="health"><span class="dot" id="dot"></span><span id="health">Checking decider…</span></span>
+    <span class="row">
+      <span class="health"><span class="dot" id="dot"></span><span id="health">Checking decider…</span></span>
+      <button class="btn" id="theme" type="button" title="Switch between dark and light">Light</button>
+    </span>
   </header>
 
   <div class="tabs" role="tablist">
@@ -434,6 +436,15 @@ async function checkHealth() {
     $("health").textContent = h.ok ? `Decider ready · ${h.model ?? ""} on ${h.device ?? "?"}` : `Decider not reachable at ${h.url}`;
   } catch { $("dot").className = "dot bad"; $("health").textContent = "Playground server not reachable"; }
 }
+
+// Theme: dark unless the viewer chose light; the choice is remembered in this browser only.
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  $("theme").textContent = t === "light" ? "Dark" : "Light";   // the button names the other one
+  try { localStorage.setItem("theme", t); } catch {}
+}
+try { applyTheme(localStorage.getItem("theme") === "light" ? "light" : "dark"); } catch { applyTheme("dark"); }
+$("theme").onclick = () => applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
 
 document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
   document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", x === b));
