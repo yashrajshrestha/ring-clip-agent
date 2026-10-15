@@ -69,6 +69,15 @@ def test_state_text_says_an_animal_is_not_a_person():
     assert "not a person" not in decider.state_text(both, [])
 
 
+def test_state_text_for_lingering_and_wild_animals():
+    dog = {"type": "motion", "t_start": 2.0, "t_end": 27.0, "peak_area": 0.1, "label": "animal", "lingering": True}
+    assert "has stayed at the door for 25s, which could mean it is trying to get in" in decider.state_text(dog, [])
+    bear = {"type": "motion", "t_start": 2.0, "t_end": 5.0, "peak_area": 0.2, "label": "wild"}
+    assert "a wild animal such as a bear, which can be dangerous" in decider.state_text(bear, [])
+    assert "an animal has stayed at the door a long time" in decider.CRITERIA["alert"]
+    assert "an animal passing by" in decider.CRITERIA["ignore"]
+
+
 def test_state_text_spells_out_cuts_and_unlabelled_motion():
     cut = {"type": "cut", "t_start": 12.3, "t_end": 12.3, "peak_area": 0.0}
     assert "an edit in the recording, not something at the door" in decider.state_text(cut, [])

@@ -25,7 +25,7 @@ ALWAYS_SECOND_LOOK = False  # True: zoomed second look even when the first look 
 ZOOM = 0.6                # crop side as a share of the frame; the detector letterboxes to 640, so a figure shows ~1.7x larger
 TARGET_MEAN = 110.0       # gamma aims the mean gray here; measured day footage sits at 80-130
 GAMMA_MAX = 3.0           # beyond this the frame is noise, not picture
-LABEL_PRIORITY = ("person", "animal", "vehicle")
+LABEL_PRIORITY = ("person", "wild", "animal", "vehicle")
 
 
 def enhance(frame: np.ndarray) -> np.ndarray:

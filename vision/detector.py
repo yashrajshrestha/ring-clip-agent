@@ -33,7 +33,7 @@ COCO = (
 # Classes that matter at a front door, grouped for the decider.
 GROUP = {
     "person": "person",
-    "dog": "animal", "cat": "animal", "bird": "animal", "bear": "animal", "horse": "animal",
+    "dog": "animal", "cat": "animal", "bird": "animal", "bear": "wild", "horse": "animal",
     "car": "vehicle", "truck": "vehicle", "bus": "vehicle", "motorcycle": "vehicle", "bicycle": "vehicle",
     "backpack": "bag", "handbag": "bag", "suitcase": "bag",
 }

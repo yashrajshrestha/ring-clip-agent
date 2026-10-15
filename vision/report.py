@@ -121,7 +121,9 @@ def _is_noise(ev: dict) -> bool:
         return True
     if ev["type"] != "motion":
         return False
-    return ev.get("label") in ("animal", "vehicle") or (not ev.get("label") and ev.get("peak_area", 0) < PERSON_AREA)
+    if ev.get("label") == "animal":
+        return not ev.get("lingering")   # a dog passing is noise; a dog at the door for 15 s is not
+    return ev.get("label") == "vehicle" or (not ev.get("label") and ev.get("peak_area", 0) < PERSON_AREA)
 
 
 SYSTEMS = {

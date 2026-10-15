@@ -19,8 +19,9 @@ SOURCE = "strands-decider-2b"
 QUESTION = "What should the doorbell do about this event for the home owner?"
 # Option name -> description; the descriptions are what the model reads.
 CRITERIA = {
-    "alert": "Notify the owner now: a person is at the door, or something was left or taken.",
-    "ignore": "Do nothing: an animal, a passing car, shadows, or tiny brief motion.",
+    "alert": "Notify the owner now: a person is at the door, something was left or taken, an animal has stayed "
+             "at the door a long time (it may be trying to get in), or a dangerous wild animal is there.",
+    "ignore": "Do nothing: an animal passing by, a passing car, shadows, or tiny brief motion.",
     "recheck": "The picture is too blurry or dark to trust; check the camera or look again.",
     "log": "Keep a note only: a camera mode change or a cut in the video, nothing at the door.",
 }
@@ -53,6 +54,7 @@ PLAIN = {
 SAW = {
     "person": "the detector saw a person",
     "animal": "the detector saw an animal (a dog, cat or bird), not a person",
+    "wild": "the detector saw a wild animal such as a bear, which can be dangerous",
     "vehicle": "the detector saw a vehicle passing, not a person at the door",
     "bag": "the detector saw a bag or parcel",
 }
@@ -63,7 +65,9 @@ def _seen(objects: dict) -> str:
     if not objects:
         return "nothing recognised"
     text = ", ".join(f"{k} x{v}" for k, v in sorted(objects.items()))
-    if objects.get("animal") and not objects.get("person"):
+    if objects.get("wild"):
+        text += " (a wild animal such as a bear, which can be dangerous)"
+    elif objects.get("animal") and not objects.get("person"):
         text += " (an animal such as a dog, not a person)"
     return text
 
@@ -79,6 +83,8 @@ def _describe(ev: dict) -> str:
                          "identify (likely a person in the dark or partly hidden)")
         elif ev.get("label"):
             parts.append(SAW.get(ev["label"], f"the detector saw a {ev['label']}"))
+        if ev.get("lingering"):
+            parts.append(f"the animal has stayed at the door for {dur:.0f}s, which could mean it is trying to get in or is stuck")
         else:
             parts.append("the detector saw no person, animal or vehicle")
     if ev.get("peak_area"):

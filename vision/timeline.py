@@ -46,6 +46,7 @@ ZOOM_DARK_BRIGHT = 60.0  # zoomed detection runs on its own below this mean gray
 ZOOM_IR_BRIGHT = 100.0   # ...or in IR night mode below this; measured IR night porches sit at 70-90
 TRACK_MIN_S = 1.0        # a person-sized blob that moves steadily this long reads as a figure...
 TRACK_MIN_MOVE = 0.08    # ...when its centre travels at least this share of the frame...
+ANIMAL_LINGER_S = 12.0   # an animal at the door this long is not passing by: it may be trying to get in or be stuck
 FIGURE_MIN_ASPECT = 0.5  # ...and its box is not long and low (upper-quartile height / width over the event).
                          # Measured: a dog crossing a doorway 0.07, a courier bending at night 1.12, a thief 0.92.
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".avi"}
@@ -105,8 +106,13 @@ def _decide(event: dict) -> dict:
     elif kind == "motion" and label == "figure":
         dur = event["t_end"] - event["t_start"]
         action, reason = "alert", f"Person-sized shape moved steadily for {dur:.1f}s"
+    elif kind == "motion" and label == "wild":
+        action, reason = "alert", "Wild animal (such as a bear) at the door"
+    elif kind == "motion" and label == "animal" and event.get("lingering"):
+        dur = event["t_end"] - event["t_start"]
+        action, reason = "alert", f"An animal has stayed at the door for {dur:.0f}s"
     elif kind == "motion" and label == "animal":
-        action, reason = "ignore", "Animal, not a visitor"
+        action, reason = "ignore", "Animal passing, not a visitor"
     elif kind == "motion" and label == "vehicle":
         action, reason = "ignore", "Vehicle passing, nobody at the door"
     elif kind == "motion":
@@ -147,8 +153,9 @@ SAY = {
     "cut": "Camera view changed.",
 }
 SAY_MOTION = {"person": "Person at the door.", "animal": "Animal at the door.", "vehicle": "Vehicle passing.",
+              "wild": "Wild animal at the door.",
               "figure": "Person-sized movement at the door."}
-LABEL_PRIORITY = ("person", "animal", "vehicle")  # a person with a car behind them is a person
+LABEL_PRIORITY = ("person", "wild", "animal", "vehicle")  # a person with a car behind them is a person
 
 
 def _runs(flags: list[bool], min_len: int) -> list[tuple[int, int]]:
@@ -339,6 +346,7 @@ def build_timeline(path: str | Path, detector=None, progress=None) -> dict:
             ev["aspect"] = _aspect(ev, frames, height / width if width else 1.0)
             if ev["label"] is None and _is_figure(ev):
                 ev["label"] = "figure"
+            ev["lingering"] = ev["label"] == "animal" and ev["t_end"] - ev["t_start"] >= ANIMAL_LINGER_S
             ev["say"] = SAY_MOTION.get(ev["label"], SAY["motion"])
         else:
             ev["say"] = SAY[ev["type"]]

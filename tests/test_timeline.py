@@ -80,6 +80,15 @@ def test_person_sized_steady_movement_is_a_figure_without_a_detector(clip):
     assert ev["decision"]["action"] == "alert" and "moved steadily" in ev["decision"]["reason"]
 
 
+def test_passing_animals_are_ignored_lingering_and_wild_ones_alert():
+    base = {"type": "motion", "t_start": 1.0, "t_end": 4.0, "peak_area": 0.1}
+    assert timeline._decide({**base, "label": "animal"})["action"] == "ignore"
+    lingering = {**base, "t_end": 26.0, "label": "animal", "lingering": True}
+    out = timeline._decide(lingering)
+    assert out["action"] == "alert" and "stayed at the door for 25s" in out["reason"]
+    assert timeline._decide({**base, "label": "wild"})["action"] == "alert"
+
+
 def test_a_long_low_blob_like_a_dog_is_not_a_figure():
     bending = {"type": "motion", "t_start": 1.0, "t_end": 4.0, "peak_area": 0.2, "aspect": 1.12,
                "track": {"frames": 30, "net": 0.5, "path": 0.6}}   # the night courier, measured
