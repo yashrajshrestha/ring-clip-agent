@@ -69,6 +69,13 @@ def test_state_text_says_an_animal_is_not_a_person():
     assert "not a person" not in decider.state_text(both, [])
 
 
+@pytest.mark.parametrize("label", ["person", "animal", "wild", "vehicle", "figure"])
+def test_a_labelled_event_never_also_says_nothing_was_seen(label):
+    ev = {"type": "motion", "t_start": 1.0, "t_end": 3.0, "peak_area": 0.1, "label": label}
+    assert "saw no person, animal or vehicle" not in decider.state_text(ev, [])
+    assert "saw no person, animal or vehicle" in decider.state_text({**ev, "label": None}, [])
+
+
 def test_state_text_for_lingering_and_wild_animals():
     dog = {"type": "motion", "t_start": 2.0, "t_end": 27.0, "peak_area": 0.1, "label": "animal", "lingering": True}
     assert "has stayed at the door for 25s, which could mean it is trying to get in" in decider.state_text(dog, [])

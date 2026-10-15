@@ -83,10 +83,10 @@ def _describe(ev: dict) -> str:
                          "identify (likely a person in the dark or partly hidden)")
         elif ev.get("label"):
             parts.append(SAW.get(ev["label"], f"the detector saw a {ev['label']}"))
-        if ev.get("lingering"):
-            parts.append(f"the animal has stayed at the door for {dur:.0f}s, which could mean it is trying to get in or is stuck")
         else:
             parts.append("the detector saw no person, animal or vehicle")
+        if ev.get("lingering"):
+            parts.append(f"the animal has stayed at the door for {dur:.0f}s, which could mean it is trying to get in or is stuck")
     if ev.get("peak_area"):
         parts.append(f"covering {ev['peak_area']:.0%} of the frame")
     return ", ".join(parts)
