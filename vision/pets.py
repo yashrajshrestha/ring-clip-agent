@@ -29,6 +29,8 @@ PETS_FILE = Path(__file__).resolve().parent.parent / "pets" / "pets.json"
 DOG_CLASSES = range(151, 269)   # ImageNet: Chihuahua (151) .. Mexican hairless (268)
 MATCH = 0.70                     # combined similarity at or above this = the same pet (tuned on the Pexels dogs)
 BREED_WEIGHT = 0.6               # the rest is coat colour
+CONTEXT_S = 2.0                  # seconds either side of a dog event to look for clear views
+VIEWS = 10                       # frames sampled for one visit
 MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 STD = np.array([0.229, 0.224, 0.225], np.float32)
 
@@ -141,7 +143,10 @@ def identify_event(video: str | Path, event: dict, detector, pets: dict[str, lis
     frames. One frame can mislead (a look-alike dog matched 4 frames in 11); the median did not."""
     from .enhance import sample_frames
     crops = []
-    for f in sample_frames(video, event["t_start"], event["t_end"], n=8):
+    # Look a little either side of the event: a dog moving through a short event is often caught
+    # in one blurred frame (measured: half a second, one detection), while it stands clear just before or after.
+    t0, t1 = max(0.0, event["t_start"] - CONTEXT_S), event["t_end"] + CONTEXT_S
+    for f in sample_frames(video, t0, t1, n=VIEWS):
         h, w = f.shape[:2]
         for o in detector.detect(f):
             if o["label"] == "dog":

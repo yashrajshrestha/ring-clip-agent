@@ -23,12 +23,14 @@ def test_identify_event_judges_the_whole_visit_by_the_median(monkeypatch, tmp_pa
             return [{"label": "dog", "group": "animal", "score": 0.9, "box": [0.1, 0.1, 0.8, 0.8]}]
 
     frames = [np.full((360, 640, 3), 100, np.uint8)] * 7
-    monkeypatch.setattr("vision.enhance.sample_frames", lambda *a, **k: frames)
+    windows = []
+    monkeypatch.setattr("vision.enhance.sample_frames", lambda v, t0, t1, n=None: windows.append((t0, t1)) or frames)
     # a look-alike: a few frames match, most do not (measured: 4 of 11, median 0.61)
     scores = iter([0.86, 0.80, 0.55, 0.52, 0.61, 0.58, 0.75])
     monkeypatch.setattr(pets, "identify", lambda c, store: {"closest": "Max", "score": next(scores)})
     out = pets.identify_event("clip.mp4", {"t_start": 1.0, "t_end": 3.0}, Dog(), {"Max": []})
     assert out == {"pet": None, "score": 0.61, "views": 7}
+    assert windows == [(0.0, 5.0)]   # 2 s either side of the 1-3 s event, clipped at the start
 
 
 def test_rules_for_own_and_unknown_dogs():
