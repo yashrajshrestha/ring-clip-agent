@@ -7,27 +7,27 @@
 | Measure | Result |
 |---|---|
 | Clips with at least one alert | 18 / 18 |
-| Events that would wake a language model (alerts) | 92 / 132 |
+| Events that would wake a language model (alerts) | 90 / 132 |
 | Object left/taken detected | 11 / 18 |
 | Object left/taken detected at night | 3 / 4 |
 | Alerts per clip, median (max) | 4 (14) |
 | Blurry/dark events | 0 |
 | Rechecks, of which rescued by enhancement | 0, 0 |
-| Decision sources | strands-decider-2b: 132 |
+| Decision sources | rule-stub: 1, strands-decider-2b: 131 |
 
 ## Per clip
 
 | Clip | Kind | Night | Events | Alerts | Person | Left/taken | Quality | Cuts | Result |
 |---|---|---|---|---|---|---|---|---|---|
 | amazon_d2yRFg-Xfqs | left |  | 13 | 9 | 4 | 2 | 0 | 4 | ok |
-| amazon__iV2anL2SKE | left |  | 11 | 7 | 5 | 1 | 0 | 4 | ok |
+| amazon__iV2anL2SKE | left |  | 11 | 6 | 5 | 1 | 0 | 4 | ok |
 | amazon_O_qJFsKEFmQ | left |  | 10 | 9 | 8 | 1 | 0 | 1 | ok |
 | amazon_miRKZwhIA70 | left |  | 17 | 14 | 14 | 0 | 0 | 3 | no left/taken event |
 | delivery_OgmMGQ_OYrY | left | yes | 1 | 1 | 0 | 0 | 0 | 0 | no left/taken event |
 | delivery_Xl-R3YCQRkY | left |  | 5 | 3 | 3 | 0 | 0 | 1 | no left/taken event |
 | delivery_H1bjA7jJC4Q | left |  | 2 | 2 | 1 | 1 | 0 | 0 | ok |
 | delivery_D59d7IwumxI | left |  | 2 | 2 | 1 | 1 | 0 | 0 | ok |
-| delivery__xg3SH6qu1c | left |  | 21 | 9 | 8 | 1 | 0 | 8 | ok |
+| delivery__xg3SH6qu1c | left |  | 21 | 8 | 8 | 1 | 0 | 8 | ok |
 | delivery_sBnub4-N-lk | left |  | 11 | 8 | 8 | 0 | 0 | 3 | no left/taken event |
 | theft_7Z4ExUfkUOw | taken |  | 4 | 4 | 4 | 0 | 0 | 0 | no left/taken event |
 | theft_k-WvGk7a9Ms | taken | yes | 2 | 2 | 0 | 1 | 0 | 0 | ok |
@@ -63,4 +63,4 @@
 |---|---|---|---|---|
 | Ring, basic motion alerts (simulated) | 120 | 17 | 25 / 26 | 0 / 2 |
 | Ring, person and package smart alerts (simulated) | 102 | 0 | 24 / 26 | 2 / 2 |
-| This project (OpenCV 5 + Decider 2B) | 119 | 4 | 26 / 26 | 2 / 2 |
+| This project (OpenCV 5 + Decider 2B) | 117 | 2 | 26 / 26 | 2 / 2 |

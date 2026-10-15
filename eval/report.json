@@ -2,7 +2,7 @@
  "summary": {
   "clips": 18,
   "events": 132,
-  "alert_events": 92,
+  "alert_events": 90,
   "alert_hits": 18,
   "scene_hits": 11,
   "scene_expected": 18,
@@ -15,7 +15,8 @@
   "rechecks": 0,
   "rescued": 0,
   "sources": {
-   "strands-decider-2b": 132
+   "strands-decider-2b": 131,
+   "rule-stub": 1
   }
  },
  "clips": [
@@ -45,7 +46,7 @@
    "night": false,
    "duration": 47.9,
    "events": 11,
-   "alerts": 7,
+   "alerts": 6,
    "person_events": 5,
    "scene_changes": 1,
    "quality_events": 0,
@@ -133,7 +134,8 @@
    "rechecks": 0,
    "rescued": 0,
    "sources": {
-    "strands-decider-2b": 5
+    "rule-stub": 1,
+    "strands-decider-2b": 4
    },
    "alert_hit": true,
    "scene_hit": false,
@@ -185,7 +187,7 @@
    "night": false,
    "duration": 55.8,
    "events": 21,
-   "alerts": 9,
+   "alerts": 8,
    "person_events": 8,
    "scene_changes": 1,
    "quality_events": 0,
@@ -398,8 +400,8 @@
     "quiet_animals": 2
    },
    "This project (OpenCV 5 + Decider 2B)": {
-    "alerts": 119,
-    "noise_alerts": 4,
+    "alerts": 117,
+    "noise_alerts": 2,
     "caught": 26,
     "quiet_animals": 2
    }
