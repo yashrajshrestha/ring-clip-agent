@@ -11,3 +11,5 @@ web/dist/
 web/public/samples/
 models/*.onnx
 .decider/
+models/*.h
+pets/

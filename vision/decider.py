@@ -23,7 +23,7 @@ CRITERIA = {
              "at the door a long time (it may be trying to get in), or a dangerous wild animal is there.",
     "ignore": "Do nothing: an animal passing by, a passing car, shadows, or tiny brief motion.",
     "recheck": "The picture is too blurry or dark to trust; check the camera or look again.",
-    "log": "Keep a note only: a camera mode change or a cut in the video, nothing at the door.",
+    "log": "Keep a note only: a camera mode change, a cut in the video, or the owner's own pet passing by.",
 }
 # Decider writes no text, so the reason shown in the UI comes from the option.
 REASONS = {
@@ -85,6 +85,11 @@ def _describe(ev: dict) -> str:
             parts.append(SAW.get(ev["label"], f"the detector saw a {ev['label']}"))
         else:
             parts.append("the detector saw no person, animal or vehicle")
+        pet = ev.get("pet")
+        if pet and pet.get("pet"):
+            parts.append(f"it is the owner's own dog, {pet['pet']} (recognised, {pet['score']:.0%} match), not a stranger's")
+        elif pet:
+            parts.append("it is not one of the owner's pets: an unknown dog")
         if ev.get("lingering"):
             parts.append(f"the animal has stayed at the door for {dur:.0f}s, which could mean it is trying to get in or is stuck")
     if ev.get("peak_area"):

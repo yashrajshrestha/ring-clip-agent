@@ -22,6 +22,7 @@ import numpy as np
 from . import decider, escalate
 from .checks import BLUR_MIN, DARK_MAX_MEAN, MOTION_MIN_AREA, blur_score, exposure, inner, is_ir, mask_overlays
 from .enhance import recheck
+from .pets import MODEL_FILE as PET_MODEL, identify_event, load_pets
 
 ANALYSIS_WIDTH = 640     # frames are downscaled to this before analysis; boxes are fractions
 WARMUP_FRAMES = 5        # MOG2 needs a few frames before its foreground means anything
@@ -108,6 +109,12 @@ def _decide(event: dict) -> dict:
         action, reason = "alert", f"Person-sized shape moved steadily for {dur:.1f}s"
     elif kind == "motion" and label == "wild":
         action, reason = "alert", "Wild animal (such as a bear) at the door"
+    elif kind == "motion" and label == "animal" and (event.get("pet") or {}).get("pet"):
+        name, dur = event["pet"]["pet"], event["t_end"] - event["t_start"]
+        if event.get("lingering"):
+            action, reason = "alert", f"{name} has been waiting at the door for {dur:.0f}s"
+        else:
+            action, reason = "log", f"{name}, your dog, is at the door"
     elif kind == "motion" and label == "animal" and event.get("lingering"):
         dur = event["t_end"] - event["t_start"]
         action, reason = "alert", f"An animal has stayed at the door for {dur:.0f}s"
@@ -337,6 +344,7 @@ def build_timeline(path: str | Path, detector=None, progress=None) -> dict:
             events.append({"type": kind, "t_start": frames[s]["t"], "t_end": frames[e]["t"], "box": None, "peak_area": 0.0})
 
     events.sort(key=lambda ev: ev["t_start"])
+    known_pets = load_pets() if detector is not None and PET_MODEL.exists() else {}   # vision/pets.py
     for n, ev in enumerate(events):
         report("decide", n, len(events))
         ev["id"] = n
@@ -347,6 +355,8 @@ def build_timeline(path: str | Path, detector=None, progress=None) -> dict:
             if ev["label"] is None and _is_figure(ev):
                 ev["label"] = "figure"
             ev["lingering"] = ev["label"] == "animal" and ev["t_end"] - ev["t_start"] >= ANIMAL_LINGER_S
+            if ev["label"] == "animal" and detector is not None and known_pets:
+                ev["pet"] = identify_event(path, ev, detector, known_pets)
             ev["say"] = SAY_MOTION.get(ev["label"], SAY["motion"])
         else:
             ev["say"] = SAY[ev["type"]]
