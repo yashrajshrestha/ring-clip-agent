@@ -302,6 +302,11 @@ $("ask").onclick = async () => {
 
 let EVENTS = [];
 function fmt(t) { return `${Number(t).toFixed(1)}s`; }
+function petTag(pet) {
+  if (!pet) return "";
+  return pet.pet ? ` <span class="tag" style="border-color:var(--ok);color:var(--ok)" title="matched ${Math.round(pet.score * 100)}% over ${pet.views} views">your dog ${esc(pet.pet)}</span>`
+                 : ` <span class="tag" title="closest match ${Math.round(pet.score * 100)}%">unknown dog</span>`;
+}
 function renderEvents() {
   const clip = $("clip").value;
   const v = $("video");
@@ -322,7 +327,7 @@ function renderEvents() {
                + (e.decision && e.decision.ms ? ` · ${(e.decision.ms / 1000).toFixed(1)} s` : "");
     return `
     <li data-id="${e.id}"><div class="row" style="justify-content:space-between">
-      <span>${esc(e.say || e.type)} ${e.label ? `<span class="muted">(${esc(e.label)})</span>` : ""}</span>
+      <span>${esc(e.say || e.type)} ${e.label ? `<span class="muted">(${esc(e.label)})</span>` : ""}${petTag(e.pet)}</span>
       <span class="pill ${esc(d.action)}" title="${esc(src)}${esc(conf)}">${esc(d.action)}</span></div>
       <span class="time">${fmt(e.t_start)}${e.t_end > e.t_start ? ` to ${fmt(e.t_end)}` : ""} · ${esc(e.type.replace("_", " "))} · <span title="who decided">${esc(src)}${esc(conf)}</span></span></li>`;
   }).join("") || `<li class="muted">No events in this clip.</li>`;
