@@ -49,6 +49,25 @@ PLAIN = {
 }
 
 
+# What the detector saw, spelled out: "saw a animal" left the decider alerting on dogs (39% sure).
+SAW = {
+    "person": "the detector saw a person",
+    "animal": "the detector saw an animal (a dog, cat or bird), not a person",
+    "vehicle": "the detector saw a vehicle passing, not a person at the door",
+    "bag": "the detector saw a bag or parcel",
+}
+
+
+def _seen(objects: dict) -> str:
+    """Detector counts in words; when only animals were seen, say outright that it is not a person."""
+    if not objects:
+        return "nothing recognised"
+    text = ", ".join(f"{k} x{v}" for k, v in sorted(objects.items()))
+    if objects.get("animal") and not objects.get("person"):
+        text += " (an animal such as a dog, not a person)"
+    return text
+
+
 def _describe(ev: dict) -> str:
     dur = ev["t_end"] - ev["t_start"]
     parts = [f"{PLAIN.get(ev['type'], ev['type'].replace('_', ' '))} at {ev['t_start']:.1f}s"]
@@ -59,7 +78,7 @@ def _describe(ev: dict) -> str:
             parts.append("a person-sized shape moved steadily across the porch, which the detector could not "
                          "identify (likely a person in the dark or partly hidden)")
         elif ev.get("label"):
-            parts.append(f"the detector saw a {ev['label']}")
+            parts.append(SAW.get(ev["label"], f"the detector saw a {ev['label']}"))
         else:
             parts.append("the detector saw no person, animal or vehicle")
     if ev.get("peak_area"):
@@ -72,19 +91,16 @@ def state_text(ev: dict, earlier: list[dict]) -> str:
     so 'person, then object taken' reads as one story."""
     lines = [f"Doorbell camera event: {_describe(ev)}."]
     if ev.get("objects"):
-        seen = ", ".join(f"{k} x{v}" for k, v in sorted(ev["objects"].items()))
-        lines.append(f"Objects detected: {seen}.")
+        lines.append(f"Objects detected: {_seen(ev['objects'])}.")
     if ev.get("recheck") is not None:
         rc = ev["recheck"]
         if rc["usable"]:
-            seen = ", ".join(f"{k} x{v}" for k, v in sorted(rc["objects"].items())) or "nothing recognised"
-            lines.append(f"Rechecked after enhancing the picture with OpenCV: now usable, detector saw {seen}.")
+            lines.append(f"Rechecked after enhancing the picture with OpenCV: now usable, detector saw {_seen(rc['objects'])}.")
         else:
             lines.append("Rechecked after enhancing the picture with OpenCV: still too dark or blurry to trust.")
         if rc.get("second_look"):
             sl = rc["second_look"]
-            seen = ", ".join(f"{k} x{v}" for k, v in sorted(sl["objects"].items())) or "nothing recognised"
-            lines.append(f"Second look, zoomed in over {sl['frames']} more frames: detector saw {seen}.")
+            lines.append(f"Second look, zoomed in over {sl['frames']} more frames: detector saw {_seen(sl['objects'])}.")
     if earlier:
         lines.append("Earlier in this clip: " + "; ".join(_describe(e) for e in earlier[-3:]) + ".")
     return " ".join(lines)

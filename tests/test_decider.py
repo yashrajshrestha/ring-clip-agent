@@ -60,6 +60,15 @@ def test_sends_one_choice_question_with_earlier_events(fake_server):
     assert "Earlier in this clip: something moved at the door at 1.0s, lasting 3.0s, the detector saw a person" in state
 
 
+def test_state_text_says_an_animal_is_not_a_person():
+    dog = {"type": "motion", "t_start": 2.0, "t_end": 3.0, "peak_area": 0.1, "label": "animal"}
+    assert "an animal (a dog, cat or bird), not a person" in decider.state_text(dog, [])
+    dark = {"type": "dark", "t_start": 4.3, "t_end": 5.1, "recheck": {"usable": True, "objects": {"animal": 7}}}
+    assert "detector saw animal x7 (an animal such as a dog, not a person)" in decider.state_text(dark, [])
+    both = {"type": "dark", "t_start": 4.3, "t_end": 5.1, "recheck": {"usable": True, "objects": {"animal": 2, "person": 5}}}
+    assert "not a person" not in decider.state_text(both, [])
+
+
 def test_state_text_spells_out_cuts_and_unlabelled_motion():
     cut = {"type": "cut", "t_start": 12.3, "t_end": 12.3, "peak_area": 0.0}
     assert "an edit in the recording, not something at the door" in decider.state_text(cut, [])

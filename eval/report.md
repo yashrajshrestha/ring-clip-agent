@@ -54,3 +54,13 @@
 - A person and a parked car can both appear in a frame; the label priority picks the person.
 - Alert volume: edited clips with many cuts raise many short person events; a real camera feed does not cut.
 - Decider 2B on a laptop CPU takes about 10 s per decision when idle; the rule stub decides when it is off.
+
+## Alerts compared with Ring (simulated)
+
+28 clips: 26 deliveries, thefts and visits that should alert, and 2 with only a dog at the door that should not. Ring is simulated from its documented settings on this project's detections (no Ring device was used): basic plans alert on every motion; paid smart alerts filter to people and packages. Ring's own package detector is likely better than the before/after comparison standing in for it here.
+
+| System | Phone alerts | Of which noise (animals, cars, video edits, small motion) | Visits caught | Dog-only clips left quiet |
+|---|---|---|---|---|
+| Ring, basic motion alerts (simulated) | 120 | 17 | 25 / 26 | 0 / 2 |
+| Ring, person and package smart alerts (simulated) | 102 | 0 | 24 / 26 | 2 / 2 |
+| This project (OpenCV 5 + Decider 2B) | 119 | 4 | 26 / 26 | 2 / 2 |

@@ -45,7 +45,9 @@ ZOOM_MIN_SHARE = 0.4     # ...and at least this share of the frame, so the crop 
 ZOOM_DARK_BRIGHT = 60.0  # zoomed detection runs on its own below this mean gray...
 ZOOM_IR_BRIGHT = 100.0   # ...or in IR night mode below this; measured IR night porches sit at 70-90
 TRACK_MIN_S = 1.0        # a person-sized blob that moves steadily this long reads as a figure...
-TRACK_MIN_MOVE = 0.08    # ...when its centre travels at least this share of the frame
+TRACK_MIN_MOVE = 0.08    # ...when its centre travels at least this share of the frame...
+FIGURE_MIN_ASPECT = 0.5  # ...and its box is not long and low (upper-quartile height / width over the event).
+                         # Measured: a dog crossing a doorway 0.07, a courier bending at night 1.12, a thief 0.92.
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".avi"}
 
 
@@ -334,6 +336,7 @@ def build_timeline(path: str | Path, detector=None, progress=None) -> dict:
         if ev["type"] == "motion":
             ev["objects"], ev["label"] = _label(ev, frames)
             ev["track"] = _track(ev, frames)
+            ev["aspect"] = _aspect(ev, frames, height / width if width else 1.0)
             if ev["label"] is None and _is_figure(ev):
                 ev["label"] = "figure"
             ev["say"] = SAY_MOTION.get(ev["label"], SAY["motion"])
@@ -393,13 +396,22 @@ def _track(event: dict, frames: list[dict]) -> dict:
     return {"frames": len(centres), "net": round(net, 4), "path": round(path, 4)}
 
 
+def _aspect(event: dict, frames: list[dict], frame_ratio: float) -> float:
+    """Upper-quartile height/width (in pixels) of the motion box over the event. One frame can
+    mislead (a person bending down is wide for a moment); a dog stays long and low throughout."""
+    asp = [f["box"][3] * frame_ratio / f["box"][2] for f in frames
+           if f["box"] is not None and f["box"][2] > 0 and event["t_start"] <= f["t"] <= event["t_end"]]
+    return round(float(np.percentile(asp, 75)), 2) if asp else 0.0
+
+
 def _is_figure(event: dict) -> bool:
     """A person-sized blob that lasts and travels steadily: the detector could
     not name it (small, dark, blurred, behind a railing), but the motion says
     person. Flicker and shadows fail the duration or the travel test."""
     dur = event["t_end"] - event["t_start"]
     return (event["peak_area"] >= PERSON_AREA and dur >= TRACK_MIN_S
-            and event["track"]["net"] >= TRACK_MIN_MOVE)
+            and event["track"]["net"] >= TRACK_MIN_MOVE
+            and event.get("aspect", 0.0) >= FIGURE_MIN_ASPECT)
 
 
 def _label(event: dict, frames: list[dict]) -> tuple[dict, str | None]:

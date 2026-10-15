@@ -80,6 +80,21 @@ def test_person_sized_steady_movement_is_a_figure_without_a_detector(clip):
     assert ev["decision"]["action"] == "alert" and "moved steadily" in ev["decision"]["reason"]
 
 
+def test_a_long_low_blob_like_a_dog_is_not_a_figure():
+    bending = {"type": "motion", "t_start": 1.0, "t_end": 4.0, "peak_area": 0.2, "aspect": 1.12,
+               "track": {"frames": 30, "net": 0.5, "path": 0.6}}   # the night courier, measured
+    dog = {**bending, "aspect": 0.07}                               # a dog crossing a doorway, measured
+    assert timeline._is_figure(bending) and not timeline._is_figure(dog)
+
+
+def test_aspect_is_the_upper_quartile_over_the_event():
+    frames = [{"t": t / 10, "box": [0.1, 0.1, 0.2, h]} for t, h in enumerate([0.1, 0.1, 0.4, 0.4, 0.4])]
+    ev = {"t_start": 0.0, "t_end": 1.0}
+    # boxes 0.2 wide; heights 0.1 and 0.4 -> aspects 0.5 and 2.0 on a square frame; p75 = 2.0
+    assert timeline._aspect(ev, frames, 1.0) == 2.0
+    assert timeline._aspect({"t_start": 5.0, "t_end": 6.0}, frames, 1.0) == 0.0
+
+
 def test_small_or_still_motion_is_not_a_figure():
     still = {"type": "motion", "t_start": 1.0, "t_end": 4.0, "peak_area": 0.2, "track": {"frames": 30, "net": 0.01, "path": 0.3}}
     tiny = {"type": "motion", "t_start": 1.0, "t_end": 4.0, "peak_area": 0.005, "track": {"frames": 30, "net": 0.5, "path": 0.5}}

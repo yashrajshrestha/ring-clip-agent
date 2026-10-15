@@ -379,5 +379,30 @@
    "scene_hit": true,
    "notes": "neighbour hides packages for safekeeping"
   }
- ]
+ ],
+ "ring_comparison": {
+  "clips": 28,
+  "should_alert": 26,
+  "animal_only": 2,
+  "systems": {
+   "Ring, basic motion alerts (simulated)": {
+    "alerts": 120,
+    "noise_alerts": 17,
+    "caught": 25,
+    "quiet_animals": 0
+   },
+   "Ring, person and package smart alerts (simulated)": {
+    "alerts": 102,
+    "noise_alerts": 0,
+    "caught": 24,
+    "quiet_animals": 2
+   },
+   "This project (OpenCV 5 + Decider 2B)": {
+    "alerts": 119,
+    "noise_alerts": 4,
+    "caught": 26,
+    "quiet_animals": 2
+   }
+  }
+ }
 }

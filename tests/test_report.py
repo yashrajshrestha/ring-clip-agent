@@ -34,6 +34,29 @@ def test_scores_hits_misses_and_failures(tmp_path):
     assert "**silent** (left): no alert at all" in md
 
 
+def test_ring_comparison_counts_alerts_noise_catches_and_quiet_dogs(tmp_path):
+    def tl(*events):
+        return {"events": [{"type": t, "label": lab, "peak_area": area, "decision": {"action": a}}
+                           for t, lab, area, a in events]}
+
+    samples = tmp_path / "s"
+    samples.mkdir()
+    (samples / "visit.timeline.json").write_text(json.dumps(tl(
+        ("motion", "person", 0.1, "alert"), ("cut", None, 0.0, "log"), ("motion", None, 0.005, "ignore"))))
+    (samples / "dog.timeline.json").write_text(json.dumps(tl(
+        ("motion", "animal", 0.1, "ignore"), ("motion", None, 0.06, "ignore"))))
+    labels = tmp_path / "l.csv"
+    labels.write_text("name,source,kind,night,notes\nvisit,x,visit,0,\ndog,x,animal,0,\n")
+    c = report.ring_comparison(samples, [labels, tmp_path / "missing.csv"])
+    assert c["clips"] == 2 and c["should_alert"] == 1 and c["animal_only"] == 1
+    basic, smart, ours = c["systems"].values()
+    assert basic == {"alerts": 4, "noise_alerts": 2, "caught": 1, "quiet_animals": 0}   # every motion buzzes
+    assert smart == {"alerts": 1, "noise_alerts": 0, "caught": 1, "quiet_animals": 1}
+    assert ours == {"alerts": 1, "noise_alerts": 0, "caught": 1, "quiet_animals": 1}
+    md = report.ring_markdown(c)
+    assert "| Ring, basic motion alerts (simulated) | 4 | 2 | 1 / 1 | 0 / 1 |" in md
+
+
 def test_missing_timelines_are_skipped(tmp_path):
     labels = tmp_path / "labels.csv"
     labels.write_text("name,youtube_id,channel,kind,night,notes\nabsent,x,c,left,0,\n")
