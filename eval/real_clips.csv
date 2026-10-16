@@ -1,19 +1,19 @@
-name,youtube_id,channel,kind,night,notes
-amazon_d2yRFg-Xfqs,d2yRFg-Xfqs,RingTV,left,0,Amazon driver; edited with zooms and cuts
-amazon__iV2anL2SKE,_iV2anL2SKE,RingTV,left,0,Amazon driver; end card from 18.4s
-amazon_O_qJFsKEFmQ,O_qJFsKEFmQ,RingTV,left,0,Amazon driver at brick doorway; end card from 46s
-amazon_miRKZwhIA70,miRKZwhIA70,RingTV,left,0,compilation of 3 visits; third repeats O_qJFsKEFmQ
-delivery_OgmMGQ_OYrY,OgmMGQ_OYrY,RingTV,left,1,late-night delivery
-delivery_Xl-R3YCQRkY,Xl-R3YCQRkY,RingTV,left,0,would-be thief drops the package
-delivery_H1bjA7jJC4Q,H1bjA7jJC4Q,Wyze,left,0,USPS carrier
-delivery_D59d7IwumxI,D59d7IwumxI,Wyze,left,0,Santa costume drop
-delivery__xg3SH6qu1c,_xg3SH6qu1c,RingTV,left,0,pile of packages
-delivery_sBnub4-N-lk,sBnub4-N-lk,RingTV,left,0,many boxes
-theft_7Z4ExUfkUOw,7Z4ExUfkUOw,RingTV,taken,0,two-way talk stops thief
-theft_k-WvGk7a9Ms,k-WvGk7a9Ms,RingTV,taken,1,birthday present taken
-theft_luvoxnxVBKA,luvoxnxVBKA,RingTV,taken,1,medical supplies
-theft_QKocOIxfqu8,QKocOIxfqu8,RingTV,taken,0,stranger with a walker
-theft_2K2sh8xHyIA,2K2sh8xHyIA,RingTV,taken,0,owner yells to drop it
-theft_RM8AxCNwzcQ,RM8AxCNwzcQ,RingTV,taken,0,neighbour taking a package
-theft_r1cmcLUahKk,r1cmcLUahKk,RingTV,taken,0,stranger stopped while owner away
-theft_vS55Kxp-rZQ,vS55Kxp-rZQ,RingTV,taken,1,neighbour hides packages for safekeeping
+name,youtube_id,channel,kind,night,notes,licence
+amazon_d2yRFg-Xfqs,d2yRFg-Xfqs,RingTV,left,0,Amazon driver; edited with zooms and cuts,standard (test only)
+amazon__iV2anL2SKE,_iV2anL2SKE,RingTV,left,0,Amazon driver; end card from 18.4s,standard (test only)
+amazon_O_qJFsKEFmQ,O_qJFsKEFmQ,RingTV,left,0,Amazon driver at brick doorway; end card from 46s,standard (test only)
+amazon_miRKZwhIA70,miRKZwhIA70,RingTV,left,0,compilation of 3 visits; third repeats O_qJFsKEFmQ,standard (test only)
+delivery_OgmMGQ_OYrY,OgmMGQ_OYrY,RingTV,left,1,late-night delivery,standard (test only)
+delivery_Xl-R3YCQRkY,Xl-R3YCQRkY,RingTV,left,0,would-be thief drops the package,standard (test only)
+delivery_H1bjA7jJC4Q,H1bjA7jJC4Q,Wyze,left,0,USPS carrier,standard (test only)
+delivery_D59d7IwumxI,D59d7IwumxI,Wyze,left,0,Santa costume drop,standard (test only)
+delivery__xg3SH6qu1c,_xg3SH6qu1c,RingTV,left,0,pile of packages,standard (test only)
+delivery_sBnub4-N-lk,sBnub4-N-lk,RingTV,left,0,many boxes,standard (test only)
+theft_7Z4ExUfkUOw,7Z4ExUfkUOw,RingTV,taken,0,two-way talk stops thief,CC-BY (reuse allowed)
+theft_k-WvGk7a9Ms,k-WvGk7a9Ms,RingTV,taken,1,birthday present taken,CC-BY (reuse allowed)
+theft_luvoxnxVBKA,luvoxnxVBKA,RingTV,taken,1,medical supplies,standard (test only)
+theft_QKocOIxfqu8,QKocOIxfqu8,RingTV,taken,0,stranger with a walker,standard (test only)
+theft_2K2sh8xHyIA,2K2sh8xHyIA,RingTV,taken,0,owner yells to drop it,standard (test only)
+theft_RM8AxCNwzcQ,RM8AxCNwzcQ,RingTV,taken,0,neighbour taking a package,CC-BY (reuse allowed)
+theft_r1cmcLUahKk,r1cmcLUahKk,RingTV,taken,0,stranger stopped while owner away,standard (test only)
+theft_vS55Kxp-rZQ,vS55Kxp-rZQ,RingTV,taken,1,neighbour hides packages for safekeeping,CC-BY (reuse allowed)

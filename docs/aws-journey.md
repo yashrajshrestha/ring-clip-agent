@@ -53,11 +53,62 @@ the generative model is reserved for the hard 10–20%.
 - Tested with a fake client (8 escalation tests, 105 in the suite). The real call waits for credentials.
 - Cost: $0 (no real calls from code yet).
 
+### 2026-10-16: an identity for the app, and the first real run
+
+- IAM → Users → **porch-agent**, no console access, one managed policy: **AmazonBedrockLimitedAccess**.
+  Access key created for "application running outside AWS"; `aws configure --profile personal`
+  (region us-east-1). Work profiles on the same laptop are never used for this project.
+- Check: `aws sts get-caller-identity --profile personal` → `user/porch-agent`. A one-word Converse call
+  from Python: 9 tokens, 1.1 s (first call, includes connection setup).
+- Lesson learned the hard way: a pasted terminal transcript can carry the secret key with it. Treat a
+  leaked key as burned: deactivate, delete, create a new one.
+
+**First full run, one clip** (Pexels "person leaves a parcel at the door", 10 s, Decider 2B on the laptop CPU):
+
+| | Count | Time per answer | Tokens | Cost per answer |
+|---|---|---|---|---|
+| Decider 2B decided alone (confidence ≥ 0.4) | 9 of 14 events | 9.7–18.6 s on CPU (~0.1 s on a GPU) | – | $0 |
+| Bedrock Nova Lite second look (confidence < 0.4) | 5 of 14 events | 1.7–5.8 s (first call slowest) | ~1,050 in / 17 out | ≈ $0.00007 |
+
+- Whole clip on Bedrock: about **$0.0003**. Sending every event would have cost 3× that and taken longer.
+- What Nova Lite got right: at 10.7 s the Decider said *log* (34%); Nova Lite looked and said
+  "A package is on the doorstep" → **alert**. That is the clip's point, and the Decider alone missed it.
+- What it got wrong: two short events at 2.0–2.8 s where the detector saw a *person* (Decider: alert, 24%)
+  came back "Nothing is at the door" → ignore. The frame is from the middle of a 0.3 s event, and the prompt
+  hides the detector's verdict on purpose (so the model looks instead of parroting). The main 6-second
+  approach at 3.1–9.6 s still alerted, so the clip outcome was right, but this is a real failure case for
+  the report: a second look on a sliver of an event can be worse than the first.
+
+**Night clip** (Pexels "child in a dark costume at the door at dusk", 8 s): the hardest case in the set.
+
+| Step | Said | Confidence | Time |
+|---|---|---|---|
+| OpenCV | one *dark* event at 1.4–3.1 s, nothing recognised even after brightening | – | – |
+| Decider 2B | **recheck** ("picture not clear enough to trust") | **10%** | 8.5 s (CPU) |
+| Nova Lite, shown the brightened frame | "A person is standing at the door, possibly waiting for someone." → **alert** | – | 3.3 s, 972 in / 24 out tokens, ≈ $0.00007 |
+
+This is the pattern working as designed: the Decider knew it did not know, and said so with a low number;
+one cheap second look turned a shrug into the right alert. Clip cost: $0.00007.
+
+**"Blurry" clip** (`dropped_delivery.mp4`): turned out to be the same video as the package clip under
+another name (identical 14 events, identical token counts), so this run was a free repeat test. Useful
+anyway: the second looks gave the **same answers both times** (temperature 0), and Bedrock latency settled
+at 1.6–1.8 s per look once warm. Cost: ≈ $0.0003. Lesson: check for duplicate test clips before counting them.
+
+### Running total after 3 clips
+
+| | |
+|---|---|
+| Bedrock calls | 11 |
+| Bedrock cost | ≈ $0.0008 |
+| Decider 2B cost | $0 (laptop) |
+| GPU hours | 0 (quota pending) |
+
 ### Next
 
-- [ ] Programmatic access for the app (an IAM identity for the personal account; the laptop currently
-      only holds unrelated work profiles, which must not be used here).
-- [ ] First real `VISION_MODEL=bedrock:...` run on the Pexels clips; record ms and tokens per second look.
+- [ ] A truly blurry clip (clips/blurry: fog, water on the lens) through the same path, after asking.
+- [ ] Decide whether very short events (< 0.5 s) should skip the second look or send 3 frames instead of 1.
+- [ ] Decide whether very short events (< 0.5 s) should skip the second look or send 3 frames instead of 1.
 - [ ] Measure: per-clip count of Decider-only decisions vs Bedrock second looks; cost and latency per path.
 - [ ] GPU session: run Decider 2B on g4dn.xlarge for a few hours, record ms per decision, stop the instance.
 - [ ] Budget alert at $20 in AWS Billing.
