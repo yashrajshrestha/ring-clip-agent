@@ -3,15 +3,22 @@ language model and let it decide the same four-way question.
 
 The decider handles every event it is confident about; only low-confidence
 events reach the expensive model, which is the point: measured on the Pexels
-clips, 2 events in 6 escalate. Off unless VISION_MODEL is set. Provider is
-Ollama (VISION_URL, default http://127.0.0.1:11434); Bedrock plugs in here
-later. Any failure returns None so the decider's own answer stands.
+clips, 2 events in 6 escalate. Off unless VISION_MODEL is set. Two providers:
+
+    VISION_MODEL=qwen2.5vl:3b                      Ollama (VISION_URL, default http://127.0.0.1:11434)
+    VISION_MODEL=bedrock:amazon.nova-lite-v1:0     Amazon Bedrock, Converse API (BEDROCK_REGION, default us-east-1;
+                                                   credentials from the usual AWS_PROFILE / environment)
+
+Every answer carries `ms` and, for Bedrock, `tokens`, so the report can put a
+time and a price on each second look. Any failure returns None so the decider's
+own answer stands.
 """
 from __future__ import annotations
 
 import base64
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -24,6 +31,9 @@ from .enhance import enhance, sample_frames
 ESCALATE_BELOW = float(os.environ.get("ESCALATE_BELOW", 0.4))   # decider confidence under this escalates
 TIMEOUT_S = float(os.environ.get("VISION_TIMEOUT", 600))         # a 3B vision model on CPU is slow
 JPEG_QUALITY = 85
+BEDROCK_PREFIX = "bedrock:"
+BEDROCK_REGION = os.environ.get("BEDROCK_REGION", "us-east-1")
+BEDROCK_MAX_TOKENS = 200
 
 # The picture comes first and the context stays thin on purpose: a small
 # vision model given "detector saw nothing" will repeat it instead of looking.
@@ -74,7 +84,35 @@ def ask_ollama(prompt: str, jpeg: bytes, model: str, url: str, timeout: float = 
         return json.load(resp)["message"]["content"]
 
 
+def bedrock_client(region: str = BEDROCK_REGION):
+    """A bedrock-runtime client; a separate function so tests can swap in a fake."""
+    import boto3
+    from botocore.config import Config
+    return boto3.client("bedrock-runtime", region_name=region,
+                        config=Config(read_timeout=60, connect_timeout=10, retries={"max_attempts": 2}))
+
+
+def ask_bedrock(prompt: str, jpeg: bytes, model_id: str, client=None) -> tuple[str, dict]:
+    """One Converse call with the image inline. Returns (text, usage) where usage
+    holds inputTokens / outputTokens for the cost record."""
+    client = client or bedrock_client()
+    resp = client.converse(
+        modelId=model_id,
+        messages=[{"role": "user", "content": [
+            {"image": {"format": "jpeg", "source": {"bytes": jpeg}}},
+            {"text": prompt},
+        ]}],
+        inferenceConfig={"maxTokens": BEDROCK_MAX_TOKENS, "temperature": 0.0},
+    )
+    text = "".join(part.get("text", "") for part in resp["output"]["message"]["content"])
+    return text, resp.get("usage", {})
+
+
 def parse_answer(text: str) -> dict | None:
+    text = text.strip()
+    if text.startswith("```"):  # Nova sometimes fences its JSON
+        text = text.strip("`")
+        text = text[text.find("{"):text.rfind("}") + 1]
     try:
         ans = json.loads(text)
     except ValueError:
@@ -89,20 +127,26 @@ def parse_answer(text: str) -> dict | None:
 def escalate(video: str | Path, ev: dict, earlier: list[dict], model: str | None = None,
              url: str | None = None) -> dict | None:
     """Ask the vision model about this event. Returns a decision dict
-    (action, reason, source) or None when off or anything fails."""
+    (action, reason, source, ms, tokens) or None when off or anything fails."""
     model = model or os.environ.get("VISION_MODEL")
     if not model:
         return None
-    url = url or os.environ.get("VISION_URL", "http://127.0.0.1:11434")
     jpeg = frame_jpeg(video, ev)
     if jpeg is None:
         return None
     prompt = PROMPT.format(state=context(ev, earlier))
+    t0 = time.monotonic()
+    tokens = None
     try:
-        text = ask_ollama(prompt, jpeg, model, url)
-    except (urllib.error.URLError, TimeoutError, OSError, KeyError, ValueError):
+        if model.startswith(BEDROCK_PREFIX):
+            text, usage = ask_bedrock(prompt, jpeg, model[len(BEDROCK_PREFIX):])
+            tokens = {"in": usage.get("inputTokens"), "out": usage.get("outputTokens")}
+        else:
+            text = ask_ollama(prompt, jpeg, model, url or os.environ.get("VISION_URL", "http://127.0.0.1:11434"))
+    except Exception:  # unreachable server, missing credentials, throttling, bad payload: the decider's answer stands
         return None
     ans = parse_answer(text)
     if ans is None:
         return None
-    return {**ans, "source": f"vision-llm:{model}", "confidence": None}
+    return {**ans, "source": f"vision-llm:{model}", "confidence": None,
+            "ms": round((time.monotonic() - t0) * 1000), "tokens": tokens}

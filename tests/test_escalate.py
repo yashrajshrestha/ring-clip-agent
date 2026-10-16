@@ -55,6 +55,7 @@ def test_only_a_low_confidence_decider_answer_escalates():
 def test_sends_one_enhanced_jpeg_with_the_four_choices(clip, fake_ollama):
     url, seen, _ = fake_ollama
     out = escalate.escalate(clip, EV, [], model="fake-vl", url=url)
+    assert isinstance(out.pop("ms"), int) and out.pop("tokens") is None   # Ollama reports no token counts
     assert out == {"action": "alert", "reason": "A child in a costume is at the door.",
                    "source": "vision-llm:fake-vl", "confidence": None}
     path, body = seen[0]
@@ -67,6 +68,41 @@ def test_sends_one_enhanced_jpeg_with_the_four_choices(clip, fake_ollama):
     assert jpeg[:2] == b"\xff\xd8"  # JPEG magic
     img = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
     assert img.shape[1] == 640 and img.mean() > 30  # enhanced, not the raw dark frame
+
+
+class FakeBedrock:
+    """Stands in for boto3's bedrock-runtime client: records the Converse call, answers like Nova Lite."""
+
+    def __init__(self, text):
+        self.text, self.calls = text, []
+
+    def converse(self, **kw):
+        self.calls.append(kw)
+        return {"output": {"message": {"role": "assistant", "content": [{"text": self.text}]}},
+                "usage": {"inputTokens": 1234, "outputTokens": 28, "totalTokens": 1262}}
+
+
+def test_bedrock_model_goes_through_converse_with_the_image_inline(clip, monkeypatch):
+    fake = FakeBedrock('```json\n{"seen": "A courier is leaving a box.", "action": "alert"}\n```')
+    monkeypatch.setattr(escalate, "bedrock_client", lambda region=None: fake)
+    out = escalate.escalate(clip, EV, [], model="bedrock:amazon.nova-lite-v1:0")
+    assert out["action"] == "alert" and out["reason"] == "A courier is leaving a box."
+    assert out["source"] == "vision-llm:bedrock:amazon.nova-lite-v1:0" and out["confidence"] is None
+    assert out["tokens"] == {"in": 1234, "out": 28} and isinstance(out["ms"], int)
+    call = fake.calls[0]
+    assert call["modelId"] == "amazon.nova-lite-v1:0" and call["inferenceConfig"]["temperature"] == 0.0
+    image, text = call["messages"][0]["content"]
+    assert image["image"]["format"] == "jpeg" and image["image"]["source"]["bytes"][:2] == b"\xff\xd8"
+    assert "Step 1" in text["text"] and all(k in text["text"] for k in decider.CRITERIA)
+
+
+def test_bedrock_failures_leave_the_decider_answer(clip, monkeypatch):
+    class Broken:
+        def converse(self, **kw):
+            raise RuntimeError("Unable to locate credentials")
+
+    monkeypatch.setattr(escalate, "bedrock_client", lambda region=None: Broken())
+    assert escalate.escalate(clip, EV, [], model="bedrock:amazon.nova-lite-v1:0") is None
 
 
 def test_bad_answers_fall_back_to_the_decider(clip, fake_ollama):
