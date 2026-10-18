@@ -6,8 +6,14 @@
 
 ## Footage we may show
 
-Only the free-licence Pexels clips (`eval/stock_clips.csv`) or your own recordings. **Never** the YouTube
-test clips in `eval/real_clips.csv`: they are marked "standard (test only)".
+Only the free-licence Pexels clips (`eval/stock_clips.csv`), the Creative Commons RingTV clips
+(`eval/cc_clips.csv`, saved in `clips/cc/`), or your own recordings. **Never** a clip marked
+"standard (test only)" in `eval/real_clips.csv`.
+
+**Credit required for the RingTV clips (CC BY):** put this in the YouTube description and on the end card:
+*"Doorbell clips: RingTV (Ring LLC), licensed CC BY 4.0 / Creative Commons Attribution, youtube.com/@Ring.
+Stock clips: Pexels."* The clips carry Ring's watermark; fine with credit here, but avoid them in any entry
+whose rules forbid third-party trademarks.
 
 | Use in the video | Clip | Why |
 |---|---|---|
@@ -15,6 +21,9 @@ test clips in `eval/real_clips.csv`: they are marked "standard (test only)".
 | Night clip | `pexels_kids_knock_night_5856456` | Decider says recheck at 10%, Bedrock sees a person → alert |
 | Quiet case | `pexels_dog_doorway_5394386` | A dog, nobody there → ignore, no alert |
 | Optional: taken | `pexels_girl_pickup_6994935` | Parcel picked up → alert |
+| Real night theft | `ring_k-WvGk7a9Ms` (CC BY) | Real doorbell footage at night: present taken |
+| Real day theft | `ring_RM8AxCNwzcQ` (CC BY) | Neighbour takes a package |
+| Real dog case | `ring_xEqUvf5UDnY` (CC BY) | Dog guarding packages → should not alert for the dog |
 
 ## Script
 
@@ -95,7 +104,7 @@ class, scrolled slowly.
 
 ### 8. Close (2:45–2:55)
 
-**Show:** end card: repo URL, `#strands-decider-2b #policy`, your name.
+**Show:** end card: repo URL, `#strands-decider-2b #policy`, your name. Plus the clip credit line (RingTV CC BY, Pexels).
 
 **Say:**
 > Decide cheap, look twice. Works with any camera, even an old phone. Thanks for watching.
