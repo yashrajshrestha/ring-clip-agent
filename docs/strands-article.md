@@ -88,8 +88,7 @@ confidence number is what keeps the big model for the cases that need it.
 ## Evaluation
 
 18 labelled doorbell clips (deliveries and thefts, 4 at night), 131 of 132 events decided by Decider 2B
-(one fell back to the rule baseline):
-18 of 18 clips raised at least one alert. The last one to fall in line was a late-night delivery where the
+(one fell back to the rule baseline). 18 of 18 clips raised at least one alert. The last one to fall in line was a late-night delivery where the
 detector never labelled the courier: OpenCV now tracks a person-sized blob that moves steadily across the
 frame and tells the decider so ("a person-sized shape moved steadily across the porch, which the detector could
 not identify"), which turned that clip from "ignore 52%" into "alert 27%", low confidence by design, and so a
