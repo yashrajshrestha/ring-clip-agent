@@ -1,4 +1,4 @@
-# A doorbell agent that knows when it can't see: Strands Decider 2B decides, OpenCV looks again, Bedrock only when needed
+# Decide Cheap, Look Twice: A Doorbell Agent Built on Strands Decider 2B
 
 *Draft for AWS Builder Center. Tags: #strands-decider-2b #policy. Repo: github.com/yashrajshrestha/ring-clip-agent (MIT).*
 
