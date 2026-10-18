@@ -11,7 +11,7 @@ Only the free-licence Pexels clips (`eval/stock_clips.csv`), the Creative Common
 "standard (test only)" in `eval/real_clips.csv`.
 
 **Credit required for the RingTV clips (CC BY):** put this in the YouTube description and on the end card:
-*"Doorbell clips: RingTV (Ring LLC), licensed CC BY 4.0 / Creative Commons Attribution, youtube.com/@Ring.
+*"Doorbell clips: RingTV (Ring LLC), licensed Creative Commons Attribution (CC BY 3.0), youtube.com/@Ring.
 Stock clips: Pexels."* The clips carry Ring's watermark; fine with credit here, but avoid them in any entry
 whose rules forbid third-party trademarks.
 
