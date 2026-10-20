@@ -368,12 +368,12 @@ def build_timeline(path: str | Path, detector=None, progress=None) -> dict:
             ev["first_decision"] = ev["decision"]
             ev["decision"] = decider.decide(ev, events[:n]) or _decide(ev)
         # Model routing: a low-confidence decider answer sends one enhanced
-        # frame to a vision model, whose answer replaces it.
+        # frame to a vision model, whose answer replaces it, except that it
+        # cannot silence an alert where a person was seen (escalate.may_override).
         if escalate.should_escalate(ev["decision"]):
             answer = escalate.escalate(path, ev, events[:n])
             if answer is not None:
-                ev["decider_decision"] = ev["decision"]
-                ev["decision"] = answer
+                escalate.apply_second_look(ev, answer)
 
     return {
         "width": width, "height": height, "fps": round(fps, 3),

@@ -55,6 +55,7 @@ def load_events(samples: Path) -> list[dict]:
                 "pet": ev.get("pet"),            # vision/pets.py: your dog by name, or unknown
                 "first_decision": ev.get("first_decision"),
                 "decider_decision": ev.get("decider_decision"),
+                "vision_decision": ev.get("vision_decision"),   # a second look that could not silence a person
                 "rule": {"action": rule["action"], "reason": rule["reason"]},
                 "request": decider.request(ev, events[:n]),
                 "state": decider.state_text(ev, events[:n]),   # what the decider read, shown without a live call

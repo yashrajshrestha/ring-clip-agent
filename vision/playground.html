@@ -342,6 +342,7 @@ function renderDecision(clip, id, ev, d, meta) {
   const took = d && d.ms ? ` · ${(d.ms / 1000).toFixed(1)} s` : "";
   const prior = ev.first_decision && ev.first_decision !== d ? `<div class="muted" style="font-size:13px;margin-top:4px">First answer, before the recheck: ${esc(ev.first_decision.action)}${ev.first_decision.confidence != null ? ` (${Math.round(ev.first_decision.confidence * 100)}%)` : ""}</div>` : "";
   const escalated = ev.decider_decision ? `<div class="muted" style="font-size:13px;margin-top:4px">Decider said ${esc(ev.decider_decision.action)} at ${Math.round(ev.decider_decision.confidence * 100)}%; the vision model overrode it.</div>` : "";
+  const kept = ev.vision_decision ? `<div class="muted" style="font-size:13px;margin-top:4px">The vision model said ${esc(ev.vision_decision.action)} ("${esc(ev.vision_decision.reason)}"), but a person was seen, so the alert stands: a second look can raise an alert, not silence a person.</div>` : "";
   $("evout").innerHTML = `<h2>Decider vs rules <span class="muted" style="font-weight:400;font-size:13px">· ${esc(meta)}</span></h2>
     <div class="state">${esc(ev.state ?? "")}</div>
     <div class="vs">
@@ -350,7 +351,7 @@ function renderDecision(clip, id, ev, d, meta) {
         <div class="muted" style="font-size:13px">${esc(rule.reason)}</div></div>
       <div><div class="muted" style="font-size:13px">${isDecider ? "Strands Decider 2B" : esc(d?.source || "decision")}</div>
         ${d ? `<div class="answer"><span class="pill ${esc(d.action)}">${esc(d.action)}</span></div>
-          <div class="muted" style="font-size:13px">${conf}${took}</div>${prior}${escalated}` : `<p class="muted">No saved decision.</p>`}</div>
+          <div class="muted" style="font-size:13px">${conf}${took}</div>${prior}${escalated}${kept}` : `<p class="muted">No saved decision.</p>`}</div>
     </div>
     ${d ? `<p class="verdict ${same ? "same" : "diff"}">${same ? "Same call as the rules." : "Different call from the rules."}</p>${d.probabilities ? bars(d.probabilities, d.action) : ""}` : ""}
     <div class="row" style="margin-top:12px">

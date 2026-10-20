@@ -142,3 +142,30 @@ def test_off_without_a_model_and_on_unreachable_server(clip, monkeypatch):
     monkeypatch.delenv("VISION_MODEL", raising=False)
     assert escalate.escalate(clip, EV, []) is None
     assert escalate.escalate(clip, EV, [], model="fake-vl", url="http://127.0.0.1:9") is None
+
+
+ALERT = {"action": "alert", "reason": "x", "source": decider.SOURCE, "confidence": 0.3}
+SAYS_NOTHING = {"action": "ignore", "reason": "Nothing is at the door.", "source": "vision-llm:fake", "confidence": None}
+
+
+@pytest.mark.parametrize("label, decision, answer, overrides", [
+    ("person", ALERT, SAYS_NOTHING, False),                       # one empty frame must not silence a person
+    ("figure", ALERT, {**SAYS_NOTHING, "action": "log"}, False),  # person-sized tracked movement counts too
+    ("animal", ALERT, {**SAYS_NOTHING, "action": "log"}, True),   # "a dog is at the door": settles a false alarm
+    (None, ALERT, SAYS_NOTHING, True),                            # scene changes, dark stretches: the look decides
+    ("person", {**ALERT, "action": "ignore"}, {**SAYS_NOTHING, "action": "alert"}, True),  # raising is always allowed
+])
+def test_the_second_look_may_raise_an_alert_but_not_silence_a_person(label, decision, answer, overrides):
+    assert escalate.may_override({"label": label}, decision, answer) is overrides
+
+
+def test_a_kept_alert_records_the_vision_answer_beside_it():
+    ev = {"label": "person", "decision": dict(ALERT)}
+    escalate.apply_second_look(ev, dict(SAYS_NOTHING))
+    assert ev["decision"]["action"] == "alert" and ev["decision"]["source"] == decider.SOURCE
+    assert ev["vision_decision"]["reason"] == "Nothing is at the door."
+    assert "decider_decision" not in ev
+
+    ev = {"label": "animal", "decision": dict(ALERT)}
+    escalate.apply_second_look(ev, {**SAYS_NOTHING, "action": "log"})
+    assert ev["decision"]["source"] == "vision-llm:fake" and ev["decider_decision"] == ALERT

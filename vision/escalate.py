@@ -63,6 +63,32 @@ def should_escalate(decision: dict, threshold: float = ESCALATE_BELOW) -> bool:
     return conf is not None and conf < threshold
 
 
+# Labels that mean OpenCV saw a person: the detector named one, or tracking
+# followed a person-sized shape across the porch.
+PERSON_LABELS = ("person", "figure")
+
+
+def may_override(ev: dict, decision: dict, answer: dict) -> bool:
+    """The second look may raise an alert or settle a doubt, but it may not
+    silence an alert on an event where OpenCV saw a person. It sees one frame
+    from the middle of the event, and on short or night events that frame is
+    often empty or smeared: on the RingTV clips, 3 of 6 Bedrock looks said
+    "nothing at the door" over a person the detector had seen, and one night
+    theft went unalerted. A dog or a scene change can still be talked down."""
+    silences = decision.get("action") == "alert" and answer.get("action") != "alert"
+    return not (silences and ev.get("label") in PERSON_LABELS)
+
+
+def apply_second_look(ev: dict, answer: dict) -> None:
+    """Put the vision model's answer on the event: it replaces the decider's
+    when may_override allows, otherwise it is kept beside the decider's alert."""
+    if may_override(ev, ev["decision"], answer):
+        ev["decider_decision"] = ev["decision"]
+        ev["decision"] = answer
+    else:
+        ev["vision_decision"] = answer
+
+
 def frame_jpeg(video: str | Path, ev: dict) -> bytes | None:
     """One enhanced frame from the middle of the event, JPEG-encoded."""
     t = (ev["t_start"] + ev["t_end"]) / 2
