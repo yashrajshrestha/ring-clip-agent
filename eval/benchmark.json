@@ -1,0 +1,492 @@
+[
+ {
+  "clip": "ring_7Z4ExUfkUOw",
+  "events": 3,
+  "opencv_s": 10.43,
+  "res": {
+   "rules": {
+    "actions": [
+     "alert",
+     "alert",
+     "alert"
+    ],
+    "ms": 0,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider": {
+    "actions": [
+     "alert",
+     "alert",
+     "alert"
+    ],
+    "ms": 4624.545416998444,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider+bedrock": {
+    "actions": [
+     "alert",
+     "alert",
+     "alert"
+    ],
+    "ms": 4624.545416998444,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "bedrock": {
+    "actions": [
+     "ignore",
+     "ignore",
+     "ignore"
+    ],
+    "ms": 6814.064291975228,
+    "usd": 0.00019361999999999998,
+    "calls": 3
+   }
+  }
+ },
+ {
+  "clip": "ring_k-WvGk7a9Ms",
+  "events": 2,
+  "opencv_s": 8.89,
+  "res": {
+   "rules": {
+    "actions": [
+     "alert",
+     "alert"
+    ],
+    "ms": 0,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider": {
+    "actions": [
+     "ignore",
+     "alert"
+    ],
+    "ms": 1136.6062500164844,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider+bedrock": {
+    "actions": [
+     "ignore",
+     "alert"
+    ],
+    "ms": 3167.57350001717,
+    "usd": 6.209999999999999e-05,
+    "calls": 1
+   },
+   "bedrock": {
+    "actions": [
+     "ignore",
+     "alert"
+    ],
+    "ms": 4015.711709012976,
+    "usd": 0.00013152,
+    "calls": 2
+   }
+  }
+ },
+ {
+  "clip": "ring_RM8AxCNwzcQ",
+  "events": 7,
+  "opencv_s": 13.38,
+  "res": {
+   "rules": {
+    "actions": [
+     "log",
+     "alert",
+     "ignore",
+     "ignore",
+     "ignore",
+     "alert",
+     "alert"
+    ],
+    "ms": 0,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider": {
+    "actions": [
+     "log",
+     "alert",
+     "ignore",
+     "ignore",
+     "ignore",
+     "ignore",
+     "alert"
+    ],
+    "ms": 4342.903250042582,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider+bedrock": {
+    "actions": [
+     "log",
+     "alert",
+     "ignore",
+     "ignore",
+     "ignore",
+     "ignore",
+     "alert"
+    ],
+    "ms": 6242.879291035933,
+    "usd": 6.419999999999999e-05,
+    "calls": 1
+   },
+   "bedrock": {
+    "actions": [
+     "ignore",
+     "ignore",
+     "ignore",
+     "ignore",
+     "ignore",
+     "ignore",
+     "ignore"
+    ],
+    "ms": 13891.439956991235,
+    "usd": 0.00046908,
+    "calls": 7
+   }
+  }
+ },
+ {
+  "clip": "ring_vS55Kxp-rZQ",
+  "events": 3,
+  "opencv_s": 8.41,
+  "res": {
+   "rules": {
+    "actions": [
+     "alert",
+     "ignore",
+     "alert"
+    ],
+    "ms": 0,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider": {
+    "actions": [
+     "alert",
+     "ignore",
+     "alert"
+    ],
+    "ms": 1630.925917008426,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider+bedrock": {
+    "actions": [
+     "alert",
+     "ignore",
+     "ignore"
+    ],
+    "ms": 5548.872751009185,
+    "usd": 0.00012839999999999998,
+    "calls": 2
+   },
+   "bedrock": {
+    "actions": [
+     "ignore",
+     "ignore",
+     "ignore"
+    ],
+    "ms": 5767.678289994365,
+    "usd": 0.00019295999999999997,
+    "calls": 3
+   }
+  }
+ },
+ {
+  "clip": "ring_nRV3nmU33oE",
+  "events": 6,
+  "opencv_s": 13.92,
+  "res": {
+   "rules": {
+    "actions": [
+     "alert",
+     "ignore",
+     "ignore",
+     "ignore",
+     "ignore",
+     "alert"
+    ],
+    "ms": 0,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider": {
+    "actions": [
+     "alert",
+     "ignore",
+     "ignore",
+     "ignore",
+     "ignore",
+     "ignore"
+    ],
+    "ms": 5537.460292020114,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider+bedrock": {
+    "actions": [
+     "alert",
+     "alert",
+     "ignore",
+     "ignore",
+     "ignore",
+     "ignore"
+    ],
+    "ms": 7679.932667029789,
+    "usd": 6.798e-05,
+    "calls": 1
+   },
+   "bedrock": {
+    "actions": [
+     "ignore",
+     "alert",
+     "ignore",
+     "ignore",
+     "ignore",
+     "ignore"
+    ],
+    "ms": 78247.16691800859,
+    "usd": 0.00040446000000000004,
+    "calls": 6
+   }
+  }
+ },
+ {
+  "clip": "ring_bkvJyN71IRE",
+  "events": 3,
+  "opencv_s": 13.38,
+  "res": {
+   "rules": {
+    "actions": [
+     "alert",
+     "alert",
+     "alert"
+    ],
+    "ms": 0,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider": {
+    "actions": [
+     "alert",
+     "alert",
+     "alert"
+    ],
+    "ms": 1699.405748018762,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider+bedrock": {
+    "actions": [
+     "alert",
+     "alert",
+     "alert"
+    ],
+    "ms": 1699.405748018762,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "bedrock": {
+    "actions": [
+     "ignore",
+     "alert",
+     "ignore"
+    ],
+    "ms": 6224.940667016199,
+    "usd": 0.00019601999999999998,
+    "calls": 3
+   }
+  }
+ },
+ {
+  "clip": "ring_jPQ9iD_EJEE",
+  "events": 2,
+  "opencv_s": 3.39,
+  "res": {
+   "rules": {
+    "actions": [
+     "alert",
+     "alert"
+    ],
+    "ms": 0,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider": {
+    "actions": [
+     "alert",
+     "alert"
+    ],
+    "ms": 1048.9537500252482,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider+bedrock": {
+    "actions": [
+     "alert",
+     "alert"
+    ],
+    "ms": 1048.9537500252482,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "bedrock": {
+    "actions": [
+     "ignore",
+     "alert"
+    ],
+    "ms": 4100.881041988032,
+    "usd": 0.00012708,
+    "calls": 2
+   }
+  }
+ },
+ {
+  "clip": "ring_xEqUvf5UDnY",
+  "events": 4,
+  "opencv_s": 8.8,
+  "res": {
+   "rules": {
+    "actions": [
+     "ignore",
+     "ignore",
+     "ignore",
+     "alert"
+    ],
+    "ms": 0,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider": {
+    "actions": [
+     "ignore",
+     "ignore",
+     "ignore",
+     "alert"
+    ],
+    "ms": 2500.3003750171047,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider+bedrock": {
+    "actions": [
+     "ignore",
+     "ignore",
+     "ignore",
+     "log"
+    ],
+    "ms": 4571.585583034903,
+    "usd": 7.17e-05,
+    "calls": 1
+   },
+   "bedrock": {
+    "actions": [
+     "ignore",
+     "ignore",
+     "ignore",
+     "log"
+    ],
+    "ms": 7875.481291004689,
+    "usd": 0.00026784,
+    "calls": 4
+   }
+  }
+ },
+ {
+  "clip": "pexels_dog_barking_5357485",
+  "events": 2,
+  "opencv_s": 8.51,
+  "res": {
+   "rules": {
+    "actions": [
+     "ignore",
+     "alert"
+    ],
+    "ms": 0,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider": {
+    "actions": [
+     "ignore",
+     "ignore"
+    ],
+    "ms": 995.8334580005612,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider+bedrock": {
+    "actions": [
+     "ignore",
+     "ignore"
+    ],
+    "ms": 995.8334580005612,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "bedrock": {
+    "actions": [
+     "ignore",
+     "ignore"
+    ],
+    "ms": 5419.536290981341,
+    "usd": 0.00012762,
+    "calls": 2
+   }
+  }
+ },
+ {
+  "clip": "pexels_dog_doorway_5394386",
+  "events": 3,
+  "opencv_s": 15.28,
+  "res": {
+   "rules": {
+    "actions": [
+     "log",
+     "log",
+     "alert"
+    ],
+    "ms": 0,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider": {
+    "actions": [
+     "ignore",
+     "ignore",
+     "ignore"
+    ],
+    "ms": 1687.6786249922588,
+    "usd": 0.0,
+    "calls": 0
+   },
+   "decider+bedrock": {
+    "actions": [
+     "ignore",
+     "ignore",
+     "ignore"
+    ],
+    "ms": 7656.597624969436,
+    "usd": 0.00019067999999999998,
+    "calls": 3
+   },
+   "bedrock": {
+    "actions": [
+     "ignore",
+     "ignore",
+     "ignore"
+    ],
+    "ms": 5724.670292023802,
+    "usd": 0.00019067999999999998,
+    "calls": 3
+   }
+  }
+ }
+]
