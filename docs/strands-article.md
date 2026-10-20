@@ -12,26 +12,62 @@ with no subscription, and that are honest when the picture can't be trusted.
 ## The agent
 
 ```
-camera clip → OpenCV 5 finds events → Decider 2B decides each one → recheck / escalate when unsure → agent writes the message
+camera clip → OpenCV 5 finds events → Decider 2B decides each one → unsure? Bedrock looks again → alert? Bedrock writes the message
 ```
+
+| Step | Runs on | Cost |
+|---|---|---|
+| OpenCV 5 turns the clip into events | the laptop | $0 |
+| **Strands Decider 2B** decides every event: alert, ignore, recheck or log | the laptop (Apple M2 Pro), ~0.5 s each | $0 |
+| Second look, only when Decider is under 40% sure | **Amazon Bedrock, Nova Lite** (one frame + the same four options) | ~$0.00007 a look |
+| The phone message, only for an alert | **Amazon Bedrock, Nova Micro**, inside a Strands agent | ~$0.00007 a message |
 
 - **OpenCV 5** turns a clip into events: motion, a person / animal / vehicle (YOLOX-S through `cv2.dnn`), a cut,
   day/night switch, a blurry or dark stretch, and "the doorstep looks different after the visit" (object left or taken).
 - **Strands Decider 2B** gets one typed `choice` question per event and returns one of four actions with a
-  calibrated confidence: **alert**, **ignore**, **recheck**, **log**. No text is generated. This is the decision
-  I handed to Decider 2B, and it fires dozens of times per clip.
+  calibrated confidence. No text is generated. This is the decision I handed to Decider 2B, and it fires
+  dozens of times per clip.
 - **recheck is an action, not a shrug.** OpenCV brightens and sharpens the frames (gamma, CLAHE, denoise), zooms
   in over more frames, runs the detector again, and the decider decides a second time on what the better picture
   shows. A delivery clip darkened to brightness 11/255 came back at 93, the courier was found in 7 of 8 frames,
-  and the decision flipped from recheck to alert. A lens-blur clip stayed recheck, with the hint "clean the lens".
-- **Model routing on confidence.** Under 40% confidence, one enhanced frame goes to **Amazon Nova Lite on
-  Amazon Bedrock** (Converse API) with the same four options. On six stock doorstep clips the decider was
-  82–87% sure on the four easy ones and 28% / 15% on exactly the two hard ones (packages with nobody there;
-  a child in a dark costume), and those are the ones Bedrock settled (see "Bedrock in practice" below).
-- **Decider first, language model last.** The Strands agent only runs for `alert`, and its one job is to write
-  the notification sentence. A `PolicyGuard` intervention denies `notify_owner` on anything but an alert, so a
-  confused model can't notify. On a real theft clip the language model ran for 2 of 5 events. (The sentence
-  writer runs on a small local model today; in Strands, moving it to Bedrock is a change of model provider.)
+  and the decision flipped from recheck to alert.
+- **Model routing on confidence.** Under 40% confidence, one enhanced frame goes to Nova Lite on Bedrock with the
+  same four options. Its answer replaces the decider's, with one exception (below): it may raise an alert, but it
+  may not silence one where OpenCV saw a person.
+- **Decider first, language model last.** A Strands agent runs only for `alert`, and its one job is to write the
+  notification on Bedrock. A `PolicyGuard` intervention denies `notify_owner` on anything but an alert, so a
+  confused model can't notify. When Bedrock's second look made the call, the message describes what it saw.
+
+## Seeing it work on real doorbell footage
+
+Eight Creative Commons clips from Ring's own YouTube channel, plus two free stock dog clips:
+
+- **Two thieves, read as "an animal".** The detector labelled a struggle at the door "animal ×12". Decider said
+  ignore, but only 39% sure, so Bedrock looked: *"Two people are at the door, one is holding a package"* → alert.
+  The phone message read: *"Two people are at your door, one holding a package and the other opening it."*
+- **A cat on the parcels.** Three animal events were ignored by Decider alone. When the cat stepped off the boxes,
+  OpenCV saw "the doorstep looks different" and Decider leaned towards alert at 40%. Bedrock looked and said log.
+  No alert. (Nova Lite called the cat a dog; the decision was still right.)
+- **A German Shepherd in a dark doorway.** Two "too dark" events: Decider unsure (30–33%), Bedrock saw *"a dog is
+  standing at the door"* → ignore.
+
+## The benchmark: four ways to decide the same events
+
+Same 10 clips, same 35 events (OpenCV ran once), four deciders. Seven clips are visits or thefts that should
+alert; three show only a pet and should stay quiet.
+
+| Method | Visit clips alerted | Pet clips kept quiet | Phone alerts | Bedrock calls | Bedrock cost | Decision time per clip |
+|---|---|---|---|---|---|---|
+| Hand-written rules | 7 / 7 | 0 / 3 | 20 | 0 | $0 | – |
+| Decider 2B alone | 7 / 7 | 2 / 3 | 15 | 0 | $0 | 2.5 s |
+| **Decider 2B + Bedrock when unsure** | **7 / 7** | **3 / 3** | **14** | **9** | **$0.0006** | **4.3 s** |
+| Bedrock on every event | 4 / 7 | 3 / 3 | 4 | 35 | $0.0023 | 13.8 s |
+
+Decider-first was the only method to get every clip right, with a quarter of Bedrock's calls and a third of its
+time. Sending everything to the bigger model was *worse*: from a single frame it often answered "nothing at the
+door", even during a theft. The small model's confidence number is what decides when the big one is worth asking.
+(Ten clips is a small test; the costs are fractions of a cent either way, so the ratios are the point.
+`vision/benchmark.py` reproduces it.)
 
 ## The decision pattern (reusable)
 
@@ -44,6 +80,11 @@ CRITERIA = {
     "recheck": "The picture is too blurry or dark to trust; check the camera or look again.",
     "log":     "Keep a note only: a camera mode change or a cut in the video, nothing at the door.",
 }
+
+def may_override(ev, decision, answer):
+    """The second look may raise an alert or settle a doubt, never silence a person."""
+    silences = decision["action"] == "alert" and answer["action"] != "alert"
+    return not (silences and ev.get("label") in ("person", "figure"))
 ```
 
 plus a plain-text state (the event, what the detector saw, the last three events, what a recheck found), the
@@ -54,52 +95,35 @@ plus a plain-text state (the event, what the detector saw, the last three events
 1. **Wording is the model.** Same decider, same 70 events, only the state text changed. Bare type names
    ("cut at 12.3s", "scene change at 42.8s") agreed with my rule baseline on 30/70 at 47% mean confidence.
    Plain English ("the video cut to a different shot (an edit in the recording, not something at the door)",
-   "the doorstep looks different after the visit, so an object was left or taken") agreed on **65/70 at 69%**,
-   and fixed every alert on a video edit and every package event the decider had downgraded to "log".
-2. **Confidence is the feature.** The decider's low-confidence events were the genuinely hard ones. Routing on
-   it means the big model sees only what it needs to: 2 of 6 events on the stock clips.
-3. **Small vision models repeat your prompt.** Given "the detector saw nothing", a 3B vision model answered
+   "the doorstep looks different after the visit, so an object was left or taken") agreed on **65/70 at 69%**.
+2. **Confidence is the feature.** The decider's low-confidence events were the genuinely hard ones: 9 of 35 on
+   the Ring and stock clips. Routing on that number means the big model sees only what it needs to.
+3. **A second look can add an alarm, but shouldn't remove a person.** The first version let Bedrock overrule
+   anything. On the Ring clips, 3 of its 6 looks said "nothing at the door" over a person the detector had seen:
+   it gets one frame from the middle of the event, and on a 0.1-second event that frame is often empty. One theft
+   clip went unalerted. The fix is four lines (`may_override` above): keep the alert, store Bedrock's answer next
+   to it. Re-run: 7 of 7 visit clips alerted, the pet clips stayed quiet, the same 6 Bedrock calls.
+4. **Small vision models repeat your prompt.** Given "the detector saw nothing", a 3B vision model answered
    "ignore: the detector saw nothing" without looking. Making it describe the picture first, with the detector's
    verdict removed from the prompt, turned that into "alert: a person is standing outside the door".
-4. **Latency and cost.** Decider 2B (`strands-decider-2B-qwen3.5-v1-2610`) on a laptop CPU: ~10 s per decision
-   when idle, 132 decisions in 24 minutes for the whole labelled set. On an Apple M2 Pro laptop GPU (PyTorch MPS)
-   the same decision takes **about 0.5 s**; AWS quotes ~115 ms on a data-centre GPU. A Bedrock second look costs
-   **about $0.00007** and takes 1.6–1.8 s once warm. Only alerts wake the language model, and only sub-40%
-   confidence wakes Bedrock.
-5. **A second look on a sliver can be worse than the first.** Two 0.3-second events, where the detector saw a
-   person and the decider said alert at 24%, came back from Bedrock as "nothing is at the door": the frame was
-   from the middle of a blink-length event. The clip still alerted on its main 6-second approach, but very short
-   events need more than one frame, or no second look at all.
+5. **Latency and cost.** Decider 2B (`strands-decider-2B-qwen3.5-v1-2610`) takes about 0.5 s per decision on an
+   Apple M2 Pro laptop (PyTorch MPS), ~10 s on a laptop CPU, and AWS quotes ~115 ms on a data-centre GPU. A Bedrock
+   second look takes 1.6–2.3 s from my laptop. On the ten clips, Bedrock cost **$0.0006 for the second looks and
+   $0.0009 for 14 phone messages**; 15 of 35 events never reached any language model at all.
 
-## Bedrock in practice
+## Evaluation on the full labelled set
 
-First runs on Amazon Bedrock (Nova Lite, us-east-1), Decider 2B on the laptop, three clips:
+18 labelled doorbell clips (deliveries and thefts, 4 at night), 131 of 132 events decided by Decider 2B (one fell
+back to the rule baseline). 18 of 18 clips raised at least one alert. The last one to fall in line was a
+late-night delivery where the detector never labelled the courier: OpenCV now tracks a person-sized blob that moves
+steadily across the frame and tells the decider so, which turned that clip from "ignore 52%" into "alert 27%", low
+confidence by design, and so a candidate for the second look. The package being left or taken was detected in 11 of
+18 (the known weak spot: the detector has no "box" class, so this relies on comparing the doorstep before and after).
+Mean confidence 68%; 13 of 132 events fell under the 40% escalation line; 90 of 132 events were alerts. Agreement
+with a hand-written rule baseline: 124 of 132. `eval/report.md` names every failure.
 
-| Clip | Events | Decider alone | Sent to Bedrock | What Bedrock changed | Cost |
-|---|---|---|---|---|---|
-| Parcel left at the door (10 s) | 14 | 9 | 5 | at 10.7 s the decider said *log* (34%); Nova Lite saw "a package is on the doorstep" → **alert** | ≈ $0.0003 |
-| Child in a dark costume at dusk (8 s) | 1 | 0 | 1 | decider: **recheck, 10% sure**; Nova Lite, shown the brightened frame: "a person is standing at the door" → **alert** | ≈ $0.00007 |
-| Repeat of the parcel clip | 14 | 9 | 5 | same answers both times (temperature 0) | ≈ $0.0003 |
-
-**11 Bedrock calls in all, about $0.0008.** Each look reads ~1,000 tokens (mostly the image) and writes ~20.
-Sending every event to Bedrock would have cost about three times as much and been slower; the decider's
-confidence number is what keeps the big model for the cases that need it.
-
-## Evaluation
-
-18 labelled doorbell clips (deliveries and thefts, 4 at night), 131 of 132 events decided by Decider 2B
-(one fell back to the rule baseline). 18 of 18 clips raised at least one alert. The last one to fall in line was a late-night delivery where the
-detector never labelled the courier: OpenCV now tracks a person-sized blob that moves steadily across the
-frame and tells the decider so ("a person-sized shape moved steadily across the porch, which the detector could
-not identify"), which turned that clip from "ignore 52%" into "alert 27%", low confidence by design, and so a
-candidate for the vision model. The package being left or taken was detected in 11 of 18 (the known weak spot:
-the detector has no "box" class, so this relies on comparing the doorstep before and after). Mean confidence
-68%; 13 of 132 events fell under the 40% escalation line; 90 of 132 events were alerts, so the language model
-would run for about two events in three and never for the rest. Agreement with a hand-written rule baseline: 124 of
-132. `eval/report.md` names every failure.
-
-**Compared with Ring's alerts** (simulated from Ring's documented settings on this project's detections, 28
-clips: 26 visits that should alert, 2 with only a dog that should not; no Ring device was used):
+**Compared with Ring's alerts** (simulated from Ring's documented settings on this project's detections, 28 clips:
+26 visits that should alert, 2 with only a dog that should not; no Ring device was used):
 
 | System | Phone alerts | Of which noise | Visits caught | Dog-only clips left quiet |
 |---|---|---|---|---|
@@ -107,9 +131,15 @@ clips: 26 visits that should alert, 2 with only a dog that should not; no Ring d
 | Ring, person and package smart alerts | 102 | 0 | 24 / 26 | 2 / 2 |
 | This agent (OpenCV 5 + Decider 2B) | 117 | 2 | **26 / 26** | 2 / 2 |
 
-Ring's own package detector is likely better than the before/after comparison standing in for it here.
+This is not a claim to beat Ring: its own package detector is likely better than the before/after comparison
+standing in for it here, and its smart alerts send fewer notifications. What this agent adds is that it works with
+any camera, says when it can't see, and shows its reasoning with a confidence number.
 
 ## What's next
 
-The notification text on Bedrock too, several frames instead of one for very short events, and the OpenCV
-pipeline in its container on AWS. And my own webcam clips, because an old phone really is enough.
+Several frames instead of one for very short events, the OpenCV pipeline in its container on AWS, and my own
+webcam clips, because an old phone really is enough.
+
+---
+
+*Doorbell clips: RingTV (Ring LLC), Creative Commons Attribution (CC BY 3.0). Stock clips: Pexels.*

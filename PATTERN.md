@@ -49,8 +49,18 @@ makes OpenCV enhance the frames, zoom in over more frames, run the detector agai
 second time with what the better picture showed.
 
 **Routing on confidence** (`vision/escalate.py`): when `confidence < 0.4`, one enhanced frame goes to a
-vision language model with the same four options; its answer replaces the decider's and the decider's is
-kept alongside as `decider_decision`.
+vision language model (Amazon Bedrock Nova Lite) with the same four options; its answer replaces the
+decider's and the decider's is kept alongside as `decider_decision`. One exception: the second look may
+raise an alert or settle a doubt, but it may not silence an alert where OpenCV saw a person. One frame from
+a short event is often empty, and on the RingTV clips 3 of 6 looks said "nothing" over a person:
+
+```python
+def may_override(ev, decision, answer):
+    silences = decision["action"] == "alert" and answer["action"] != "alert"
+    return not (silences and ev.get("label") in ("person", "figure"))
+```
+
+When it does not override, the answer is kept as `vision_decision` beside the alert.
 
 ## 3. How to use it in your own agent
 
@@ -72,4 +82,7 @@ kept alongside as `decider_decision`.
 - Pexels doorstep clips: 4 of 6 main events decided confidently (82-87%); the 2 low-confidence ones
   (28%, 15%) were exactly the ones a vision model needed to settle.
 - Real theft clip, decider-first agent: the language model ran for 2 of 5 events.
-- Decider 2B on a laptop CPU: ~10 s per decision when idle (115 ms on a GPU per AWS).
+- Decider 2B: ~0.5 s per decision on an Apple M2 Pro (MPS), ~10 s on a laptop CPU (115 ms on a GPU per AWS).
+- Four-way benchmark on 10 shareable clips (`eval/benchmark.md`): Decider first with a Bedrock second look
+  alerted on 7/7 visit clips and kept 3/3 pet clips quiet with 9 Bedrock calls ($0.0006); Bedrock on every
+  event caught 4/7 visits with 35 calls ($0.0023), and Decider alone kept 2/3 pet clips quiet.
