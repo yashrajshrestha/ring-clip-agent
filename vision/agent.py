@@ -1,16 +1,19 @@
 """Strands agent for doorbell events, decider first.
 
-    python -m vision.agent <clip> [--limit N] [--event ID] [--model llama3.2:3b]
+    python -m vision.agent <clip> [--limit N] [--event ID] [--model bedrock:amazon.nova-micro-v1:0]
 
 For each event in `<samples>/<clip>.timeline.json` the decision comes first
 and cheaply: the timeline's own decision when Decider 2B (or the vision
 model) made it, otherwise a live Decider 2B call, otherwise the rule stub.
-Only an `alert` wakes the language model (a local Ollama model for now,
-Bedrock later), and its one job is to write the notification. ignore, log
-and recheck never touch it. A PolicyGuard intervention still sits in front of
-notify_owner, so even a confused model cannot notify on a non-alert.
-Needs `ollama serve`; DECIDER_URL (with DECIDER_TIMEOUT=300 on CPU) for live
-decisions.
+Only an `alert` wakes the language model, and its one job is to write the
+notification. ignore, log and recheck never touch it. A PolicyGuard
+intervention still sits in front of notify_owner, so even a confused model
+cannot notify on a non-alert.
+
+The model is `bedrock:<model id>` for Amazon Bedrock (credentials from
+AWS_PROFILE or the environment, region BEDROCK_REGION, default us-east-1) or an
+Ollama model name for a local one (`ollama serve`). AGENT_MODEL sets the
+default. DECIDER_URL (with DECIDER_TIMEOUT=300 on CPU) for live decisions.
 """
 from __future__ import annotations
 
@@ -23,6 +26,7 @@ from pathlib import Path
 
 from strands import Agent, tool
 from strands.interventions import Deny, InterventionHandler, Proceed
+from strands.models.bedrock import BedrockModel
 from strands.models.ollama import OllamaModel
 
 from . import decider
@@ -31,10 +35,22 @@ from .timeline import _decide
 SYSTEM = (
     "You are a doorbell camera assistant. The decision to notify the home owner has already been made. "
     "Call notify_owner exactly once with one short, friendly sentence telling the owner what happened, "
-    "based on the event description you are given. Then reply with one line saying what you sent."
+    "based on the event description you are given. If a second look at the picture is given, it is more "
+    "reliable than the detector: describe what it saw. Then reply with one line saying what you sent."
 )
 
 MODEL_FREE = {"ignore", "log", "recheck"}   # handled without a language model
+BEDROCK_PREFIX = "bedrock:"
+DEFAULT_MODEL = os.environ.get("AGENT_MODEL", os.environ.get("OLLAMA_MODEL", "llama3.2:3b"))
+
+
+def make_model(name: str, region: str | None = None):
+    """`bedrock:<model id>` -> Amazon Bedrock through the Converse API; anything else -> Ollama."""
+    if name.startswith(BEDROCK_PREFIX):
+        return BedrockModel(model_id=name[len(BEDROCK_PREFIX):],
+                            region_name=region or os.environ.get("BEDROCK_REGION", "us-east-1"),
+                            temperature=0.0, max_tokens=200)
+    return OllamaModel(os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434"), model_id=name)
 
 
 def decide_event(ev: dict, earlier: list[dict], url: str | None = None) -> dict:
@@ -77,6 +93,15 @@ def make_tools(outbox: list[dict]) -> list:
     return [notify_owner]
 
 
+def message_prompt(ev: dict, earlier: list[dict], decision: dict) -> str:
+    """What the sentence writer reads: the event, and when a vision model made the
+    call, what it saw (it can correct the detector, e.g. "animal" that was two people)."""
+    prompt = f"Event: {decider.state_text(ev, earlier)} Decision: alert"
+    if decision.get("source", "").startswith("vision-llm:"):
+        return prompt + f". A second look at the picture saw: {decision['reason']}"
+    return prompt + f", because {decision['reason']}."
+
+
 def handle_without_model(decision: dict, outbox: list[dict]) -> None:
     """ignore does nothing; log and recheck record the decider's own reason."""
     if decision["action"] == "log":
@@ -97,20 +122,23 @@ def run_clip(events: list[dict], model, guard: PolicyGuard, limit: int | None = 
         decision = decide_event(ev, events[:n], url)
         decide_ms = round((time.time() - t0) * 1000)
         guard.decision = decision
-        reply, model_ms = "", 0
+        reply, model_ms, tokens = "", 0, None
         if decision["action"] in MODEL_FREE:
             handle_without_model(decision, outbox)
         else:
             t1 = time.time()
             agent = Agent(model=model, tools=make_tools(outbox), system_prompt=SYSTEM,
                           interventions=[guard], callback_handler=None)
-            reply = str(agent(f"Event: {decider.state_text(ev, events[:n])} "
-                              f"Decision: alert, because {decision['reason']}.")).strip()
+            result = agent(message_prompt(ev, events[:n], decision))
+            reply = str(result).strip()
             model_ms = round((time.time() - t1) * 1000)
+            usage = getattr(getattr(result, "metrics", None), "accumulated_usage", None) or {}
+            tokens = {"in": usage.get("inputTokens", 0), "out": usage.get("outputTokens", 0)}
         yield {
             "id": ev["id"], "t_start": ev["t_start"], "type": ev["type"], "label": ev.get("label"),
             "decision": decision, "tools": outbox, "reply": reply,
             "model_ran": decision["action"] not in MODEL_FREE, "decide_ms": decide_ms, "model_ms": model_ms,
+            "tokens": tokens,
         }
 
 
@@ -120,12 +148,13 @@ def main() -> None:
     ap.add_argument("--samples", type=Path, default=Path("web/public/samples"))
     ap.add_argument("--limit", type=int, help="only the first N events")
     ap.add_argument("--event", type=int, help="only this event id")
-    ap.add_argument("--model", default=os.environ.get("OLLAMA_MODEL", "llama3.2:3b"))
+    ap.add_argument("--model", default=DEFAULT_MODEL,
+                    help="bedrock:amazon.nova-micro-v1:0 for Amazon Bedrock, or an Ollama model name")
     ap.add_argument("--out", type=Path, help="write the trace as JSON here")
     args = ap.parse_args()
 
     events = json.loads((args.samples / f"{args.clip}.timeline.json").read_text())["events"]
-    model = OllamaModel(os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434"), model_id=args.model)
+    model = make_model(args.model)
     url = os.environ.get("DECIDER_URL")
     guard = PolicyGuard()
 
@@ -138,7 +167,9 @@ def main() -> None:
         print(f"{row['t_start']:6.1f}s {row['type']:<12} {d['action']:<7}{conf} [{d['source']}] "
               f"{'model ' + str(row['model_ms'] // 1000) + 's' if row['model_ran'] else 'no model':<12} -> {tools}", flush=True)
     ran = sum(r["model_ran"] for r in trace)
-    print(f"\nlanguage model ran for {ran} of {len(trace)} events; guard denied {guard.denied} notify attempts")
+    used = [r["tokens"] for r in trace if r["tokens"]]
+    tok = f"; {sum(t['in'] for t in used)} tokens in / {sum(t['out'] for t in used)} out" if used else ""
+    print(f"\nlanguage model ran for {ran} of {len(trace)} events; guard denied {guard.denied} notify attempts{tok}")
     if args.out:
         args.out.write_text(json.dumps(trace, indent=1))
 

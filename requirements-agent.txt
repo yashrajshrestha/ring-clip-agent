@@ -1,3 +1,4 @@
 # Strands agent (vision/agent.py), kept out of requirements.txt so the Lambda image stays small.
-# Local model: install Ollama, then `ollama pull llama3.2:3b`.
+# Amazon Bedrock works out of the box (boto3 is in requirements.txt); for a local model install Ollama,
+# then `ollama pull llama3.2:3b`.
 strands-agents[ollama]==1.60.0

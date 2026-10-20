@@ -97,12 +97,21 @@ intervention denies `notify_owner` on anything but an alert, so a confused model
 
 The run prints how many events woke the model, the measured saving the Strands hackathon asks for.
 
-It runs on a local Ollama model for now (Bedrock comes later):
+The sentence is written by Amazon Bedrock (Nova Micro) or, offline, a local Ollama model. When a
+vision model made the call, the message describes what it saw, which can correct the detector
+(an "animal" that was two people with a package):
 
     pip install -r requirements-agent.txt
+    # Amazon Bedrock (credentials from AWS_PROFILE or the environment)
+    AWS_PROFILE=personal DECIDER_URL=http://127.0.0.1:8000 \
+      python -m vision.agent ring_nRV3nmU33oE --model bedrock:amazon.nova-micro-v1:0
+
+    # or a local model
     ollama pull llama3.2:3b
-    DECIDER_URL=http://127.0.0.1:8000 DECIDER_TIMEOUT=300 \
-      python -m vision.agent theft_7Z4ExUfkUOw --limit 3
+    DECIDER_URL=http://127.0.0.1:8000 DECIDER_TIMEOUT=300 python -m vision.agent theft_7Z4ExUfkUOw --limit 3
+
+On the 10 shareable clips (`eval/cc_clips.csv` plus the two Pexels dog clips) the model ran for 14 of
+35 events, about 1,300 tokens in and 150 out per message: roughly $0.00007 per alert on Nova Micro.
 
 Without `DECIDER_URL` the rule stub decides instead, labelled `rule-stub`.
 

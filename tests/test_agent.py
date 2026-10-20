@@ -64,3 +64,21 @@ def test_guard_lets_notify_through_only_on_alert():
         assert isinstance(out, Deny) and action in out.reason
     assert guard.denied == 3
     assert isinstance(_call(guard, "other_tool"), Proceed)
+
+
+def test_model_name_picks_bedrock_or_ollama():
+    from strands.models.bedrock import BedrockModel
+    from strands.models.ollama import OllamaModel
+
+    m = agent.make_model("bedrock:amazon.nova-micro-v1:0", region="us-east-1")
+    assert isinstance(m, BedrockModel)
+    assert m.get_config()["model_id"] == "amazon.nova-micro-v1:0" and m.get_config()["temperature"] == 0.0
+    assert isinstance(agent.make_model("llama3.2:3b"), OllamaModel)
+
+
+def test_a_second_look_is_what_the_message_describes():
+    seen = {"action": "alert", "reason": "Two people are at the door, one is holding a package.",
+            "source": "vision-llm:bedrock:amazon.nova-lite-v1:0", "confidence": None}
+    prompt = agent.message_prompt({**PERSON, "label": "animal"}, [], seen)
+    assert "A second look at the picture saw: Two people are at the door" in prompt
+    assert "second look" not in agent.message_prompt(PERSON, [], _decision("alert"))
