@@ -1,5 +1,7 @@
 # ring-clip-agent
 
+**Demo video (2:55):** https://youtu.be/ivwJz-WfAxc
+
 OpenCV 5 clip quality and event checks for Ring-style doorbell video, feeding a Bedrock agent on AWS.
 
 ## Run

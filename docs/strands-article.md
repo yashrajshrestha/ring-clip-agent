@@ -1,6 +1,6 @@
 # Decide Cheap, Look Twice: A Doorbell Agent Built on Strands Decider 2B
 
-*Draft for AWS Builder Center. Tags: #strands-decider-2b #policy. Repo: github.com/yashrajshrestha/ring-clip-agent (MIT).*
+*Draft for AWS Builder Center. Tags: #strands-decider-2b #policy. Repo: github.com/yashrajshrestha/ring-clip-agent (MIT). Demo video (2:55): https://youtu.be/ivwJz-WfAxc*
 
 ## The problem
 
