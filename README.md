@@ -1,6 +1,9 @@
 # ring-clip-agent
 
+**Live demo (LookTwice, AWS Graviton):** http://184.197.167.91/
 **Demo video (2:55):** https://youtu.be/ivwJz-WfAxc
+**Technical report (OpenCV AI Competition 2026):** [docs/opencv-report.md](docs/opencv-report.md)
+**Architecture:** [docs/architecture.md](docs/architecture.md)
 **Article (AWS Builder Center):** https://builder.aws.com/content/3L5C7j4wQFRqJz1IoDHIEEOZEp5/decide-cheap-look-twice-a-doorbell-agent-built-on-strands-decider-2b
 
 OpenCV 5 clip quality and event checks for Ring-style doorbell video, feeding a Bedrock agent on AWS.
@@ -8,7 +11,7 @@ OpenCV 5 clip quality and event checks for Ring-style doorbell video, feeding a 
 ## Run
 
     python -m venv .venv && . .venv/bin/activate
-    pip install -r requirements.txt
+    pip install -r requirements-dev.txt     # pinned versions; includes requirements.txt
     pytest
     python -m vision.cli path/to/clips > facts.jsonl
 
@@ -65,7 +68,9 @@ A truly black frame cannot be rescued; the recheck says so instead of guessing.
 
 When Decider 2B answers with confidence under `ESCALATE_BELOW` (default 0.4), one enhanced frame from
 the event goes to a vision language model with the same four choices, and its answer replaces the
-decider's (`vision/escalate.py`). The event keeps `decider_decision` so both are visible. Off unless
+decider's (`vision/escalate.py`), except that it may never silence an alert about a person
+(`may_override`): one frame often misses someone who just left it, so that alert stands and the second
+look is kept as `vision_decision`. The event keeps `decider_decision` so both are visible. Off unless
 `VISION_MODEL` is set. Two providers:
 
     # Amazon Bedrock (Nova Lite reads the frame; credentials from AWS_PROFILE or the environment)
@@ -121,3 +126,20 @@ Without `DECIDER_URL` the rule stub decides instead, labelled `rule-stub`.
 ## Labels
 
 `eval/labels.csv` columns: `clip, quality (good|bad), dup_group (int), event (person|package|pet|vehicle|none), night (0|1), notes`.
+
+## Deploy on AWS
+
+`deploy/terraform` builds the public LookTwice demo: one Graviton instance (t4g.xlarge) running the
+OpenCV 5 pipeline, Decider 2B on CPU and the page behind nginx; Bedrock Nova for the second look and the
+alert text; the published clips in a private S3 bucket; logs and metrics in CloudWatch; admin through
+Systems Manager (no SSH). Needs Terraform 1.5+ and AWS credentials with Bedrock Nova model access in the
+region.
+
+    cd deploy/terraform
+    terraform init
+    terraform apply          # prints url, instance_id, logs and admin_shell
+    terraform destroy        # removes everything
+
+Only clips listed in `deploy/published_clips.txt` are uploaded. The page answers once first-boot setup
+finishes; follow it with the `logs` output (`aws logs tail /ring-clip-agent --follow`). Between demo
+sessions the instance can be stopped and started again; the address stays the same.

@@ -100,8 +100,10 @@ class Inbox:
             def progress(stage: str, done: int, total: int) -> None:
                 if cancel_flag.exists():   # the page's Cancel button writes this; stop at the next step
                     raise Cancelled(p.stem)
+                changed = (self.status.get("progress") or {}).get("stage") != stage
                 self.status["progress"] = {"stage": stage, "done": done, "total": total}
-                if stage != "analyse" or time.time() - last[0] > 0.5:   # frames tick fast; don't rewrite the file each time
+                # frames tick fast; don't rewrite the file each time, but always show a new stage
+                if changed or stage != "analyse" or time.time() - last[0] > 0.5:
                     last[0] = time.time()
                     # clips dropped while this one runs show up as waiting straight away
                     self.status["queue"] = [q.stem for q in self.pending() if q.stem != p.stem]
