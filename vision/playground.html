@@ -84,6 +84,7 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
 .verdict.same { color: var(--ok); } .verdict.diff { color: var(--warn); }
 .state { background: var(--bg); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
 [hidden] { display: none !important; }
+  .drop.status-only { border: 0; padding: 0; min-height: 0; background: none; }
 </style>
 </head>
 <body>
@@ -145,8 +146,8 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
       </div>
       <div class="drop" id="drop">
         <input type="file" id="file" accept="video/*" hidden>
-        <b>Drop a clip here</b> or <button class="btn" id="choose" type="button">choose a file</button>
-        <div class="muted">OpenCV analyses it and the decider decides each event; it then appears in the list above.</div>
+        <div id="dropask"><b>Drop a clip here</b> or <button class="btn" id="choose" type="button">choose a file</button>
+        <div class="muted">OpenCV analyses it and the decider decides each event; it then appears in the list above.</div></div>
         <div class="inboxmsg" id="inboxmsg"></div>
         <div class="progress" id="progress" hidden><div class="pfill" id="pfill"></div></div>
         <div class="queue" id="queue" hidden></div>
@@ -403,10 +404,12 @@ function bindVisionButton(clip, id) {
   };
 }
 
+let CHOSEN = null;   // the clip the visitor picked; the dropdown is rebuilt underneath it while runs come and go
 async function loadEvents(selectClip) {
   EVENTS = await (await fetch("/api/events")).json();
   const clips = [...new Set(EVENTS.map((e) => e.clip))];
-  const current = selectClip || $("clip").value;
+  if (selectClip) CHOSEN = selectClip;
+  const current = CHOSEN || $("clip").value;
   $("clip").innerHTML = clips.map((c) => `<option>${esc(c)}</option>`).join("") || `<option>No timelines found</option>`;
   await refreshQueue();   // put back placeholders for clips that are queued or running
   if ([...$("clip").options].some((o) => o.value === current)) $("clip").value = current;
@@ -475,6 +478,8 @@ async function refreshQueue() {
     o.dataset.pending = w === s.processing ? "now" : "wait";
     o.textContent = `${w} (${w === s.processing ? "analysing…" : "waiting…"})`;
   }
+  // A placeholder that vanished and came back would leave the first clip selected; keep the visitor's choice.
+  if (CHOSEN && sel.value !== CHOSEN && [...sel.options].some((o) => o.value === CHOSEN)) sel.value = CHOSEN;
 }
 function watchInbox(stem, since, verb) {
   const t0 = Date.now();
@@ -535,6 +540,7 @@ function clearResults(stem, verb) {
 }
 async function rerun(profile) {
   const clip = $("clip").value;
+  CHOSEN = clip;
   if (!clip || !EVENTS.some((e) => e.clip === clip)) return;
   inboxMsg(`Queuing ${clip} for a fresh ${profile === "harder" ? "harder " : ""}run…`);
   const r = await post("/api/rerun", { clip, profile });
@@ -582,11 +588,15 @@ loadPreset("Doorbell action");
 checkHealth();
 setInterval(checkHealth, 15000);
 loadEvents();
-$("clip").onchange = renderEvents;
+$("clip").onchange = () => { CHOSEN = $("clip").value; renderEvents(); };
 setInterval(refreshQueue, 2000);
 fetch("/api/inbox").then((r) => r.json()).then((s) => {
   if (!s.enabled) { drop.hidden = true; $("rerun").hidden = true; $("harder").hidden = true; }
-  else if (s.uploads === false) drop.hidden = true;   // public demo: Re-run and Look harder only
+  else if (s.uploads === false) {   // public demo: Re-run and Look harder only; the progress line stays
+    $("dropask").hidden = true;
+    drop.classList.add("status-only");
+    ["dragenter", "dragover", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.stopImmediatePropagation(); e.preventDefault(); }, true));
+  }
 }).catch(() => {});
 </script>
 </body>
