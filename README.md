@@ -1,6 +1,7 @@
 # ring-clip-agent
 
 **Demo video (2:55):** https://youtu.be/ivwJz-WfAxc
+**Article (AWS Builder Center):** https://builder.aws.com/content/3L5C7j4wQFRqJz1IoDHIEEOZEp5/decide-cheap-look-twice-a-doorbell-agent-built-on-strands-decider-2b
 
 OpenCV 5 clip quality and event checks for Ring-style doorbell video, feeding a Bedrock agent on AWS.
 
