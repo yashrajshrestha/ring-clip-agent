@@ -251,3 +251,19 @@ def test_public_mode_reruns_samples_but_refuses_uploads(tmp_path, fake_decider):
         assert code == 200 and (tmp_path / "inbox" / "porch.mp4").exists()
     finally:
         srv.shutdown()
+
+
+def test_public_uploads_are_size_capped_and_rate_limited(tmp_path, fake_decider):
+    url, _ = fake_decider
+    handler = playground.make_handler(url, tmp_path, tmp_path / "inbox", max_upload=10, uploads_per_hour=2,
+                                      upload_note="Uploads are removed every hour.")
+    srv, base = _serve(handler)
+    try:
+        assert _put(base + "/api/upload?name=big.mp4", b"x" * 11)[0] == 413
+        assert _put(base + "/api/upload?name=a.mp4", b"xx")[0] == 200
+        assert _put(base + "/api/upload?name=b.mp4", b"xx")[0] == 200
+        assert _put(base + "/api/upload?name=c.mp4", b"xx")[0] == 429
+        status = json.loads(_get(base + "/api/inbox")[1])
+        assert status["max_upload_mb"] == 0 and status["upload_note"] == "Uploads are removed every hour."
+    finally:
+        srv.shutdown()

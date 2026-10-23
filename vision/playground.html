@@ -85,6 +85,9 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
 .state { background: var(--bg); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
 [hidden] { display: none !important; }
   .drop.status-only { border: 0; padding: 0; min-height: 0; background: none; }
+  .novideo { text-align: center; color: var(--muted, #9aa5b4); font-size: 14px; margin: 8px 0 12px; }
+  .novideo svg { width: 100%; max-height: 220px; color: var(--muted, #9aa5b4); display: block; margin-bottom: 8px; }
+  .uploadnote { font-size: 12px; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -148,11 +151,29 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
         <input type="file" id="file" accept="video/*" hidden>
         <div id="dropask"><b>Drop a clip here</b> or <button class="btn" id="choose" type="button">choose a file</button>
         <div class="muted">OpenCV analyses it and the decider decides each event; it then appears in the list above.</div></div>
+        <div class="muted uploadnote" id="uploadnote" hidden></div>
         <div class="inboxmsg" id="inboxmsg"></div>
         <div class="progress" id="progress" hidden><div class="pfill" id="pfill"></div></div>
         <div class="queue" id="queue" hidden></div>
       </div>
-      <video id="video" controls playsinline muted preload="metadata"></video>
+      <div class="novideo" id="novideo">
+        <svg viewBox="0 0 320 180" role="img" aria-label="LookTwice doorbell robot waiting for a clip">
+          <rect x="0" y="0" width="320" height="180" rx="14" fill="var(--panel2, rgba(127,127,127,.08))"/>
+          <rect x="60" y="34" width="80" height="120" rx="12" fill="none" stroke="currentColor" stroke-width="3" opacity=".55"/>
+          <circle cx="126" cy="98" r="4" fill="currentColor" opacity=".55"/>
+          <line x1="40" y1="154" x2="160" y2="154" stroke="currentColor" stroke-width="3" opacity=".35"/>
+          <line x1="212" y1="40" x2="212" y2="56" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="212" cy="36" r="5" fill="#f5a524"/>
+          <rect x="178" y="56" width="68" height="84" rx="16" fill="none" stroke="currentColor" stroke-width="3"/>
+          <circle cx="212" cy="84" r="17" fill="none" stroke="currentColor" stroke-width="3"/>
+          <circle cx="212" cy="84" r="7" fill="#f5a524"><animate attributeName="r" values="7;5;7" dur="2.4s" repeatCount="indefinite"/></circle>
+          <line x1="196" y1="116" x2="228" y2="116" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="262" cy="64" r="11" fill="none" stroke="#f5a524" stroke-width="3"/>
+          <line x1="270" y1="72" x2="282" y2="84" stroke="#f5a524" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        <div>Pick a clip above to watch it and see what the agent decided.</div>
+      </div>
+      <video id="video" controls playsinline muted preload="metadata" hidden></video>
       <ul class="events" id="evlist"></ul>
     </div>
     <div class="card" id="evout">
@@ -316,6 +337,14 @@ function petTag(pet) {
 function renderEvents() {
   const clip = $("clip").value;
   const v = $("video");
+  $("novideo").hidden = !!clip; v.hidden = !clip;
+  if (!QUEUE.processing) { $("rerun").disabled = !clip; $("harder").disabled = !clip; }
+  if (!clip) {
+    v.pause(); v.removeAttribute("src"); v.dataset.clip = "";
+    $("proftag").hidden = true;
+    $("evlist").innerHTML = "";
+    return;
+  }
   const opt = $("clip").selectedOptions[0];
   if (opt && opt.dataset.pending) {   // dropped but not analysed yet: nothing to play or list
     v.removeAttribute("src"); v.dataset.clip = ""; v.load();
@@ -410,9 +439,10 @@ async function loadEvents(selectClip) {
   const clips = [...new Set(EVENTS.map((e) => e.clip))];
   if (selectClip) CHOSEN = selectClip;
   const current = CHOSEN || $("clip").value;
-  $("clip").innerHTML = clips.map((c) => `<option>${esc(c)}</option>`).join("") || `<option>No timelines found</option>`;
+  $("clip").innerHTML = (clips.length ? `<option value="">Choose a clip…</option>` : "")
+    + (clips.map((c) => `<option>${esc(c)}</option>`).join("") || `<option value="">No timelines found</option>`);
   await refreshQueue();   // put back placeholders for clips that are queued or running
-  if ([...$("clip").options].some((o) => o.value === current)) $("clip").value = current;
+  $("clip").value = [...$("clip").options].some((o) => o.value === current) ? current : "";
   renderEvents();
 }
 
@@ -527,6 +557,7 @@ async function upload(file) {
   const data = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
   if (!r.ok) return inboxMsg(data.error, true);
   await refreshQueue();                                   // the new clip appears in the dropdown at once...
+  CHOSEN = data.name;
   if ([...$("clip").options].some((o) => o.value === data.name)) { $("clip").value = data.name; renderEvents(); }   // ...selected
   watchInbox(data.name, data.since || 0, "Analysing");   // server time of the request, not the status file's clock
 }
@@ -592,6 +623,10 @@ $("clip").onchange = () => { CHOSEN = $("clip").value; renderEvents(); };
 setInterval(refreshQueue, 2000);
 fetch("/api/inbox").then((r) => r.json()).then((s) => {
   if (!s.enabled) { drop.hidden = true; $("rerun").hidden = true; $("harder").hidden = true; }
+  else if (s.uploads && (s.upload_note || s.max_upload_mb < 500)) {
+    $("uploadnote").hidden = false;
+    $("uploadnote").textContent = `Max ${s.max_upload_mb} MB per video. ${s.upload_note || ""}`.trim();
+  }
   else if (s.uploads === false) {   // public demo: Re-run and Look harder only; the progress line stays
     $("dropask").hidden = true;
     drop.classList.add("status-only");

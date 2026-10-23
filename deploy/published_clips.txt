@@ -1,0 +1,11 @@
+# Clips the public demo serves (Creative Commons RingTV + Pexels). Only these are uploaded to S3.
+ring_7Z4ExUfkUOw
+ring_k-WvGk7a9Ms
+ring_RM8AxCNwzcQ
+ring_vS55Kxp-rZQ
+ring_nRV3nmU33oE
+ring_bkvJyN71IRE
+ring_jPQ9iD_EJEE
+ring_xEqUvf5UDnY
+pexels_dog_barking_5357485
+pexels_dog_doorway_5394386

@@ -87,7 +87,7 @@ UNIT
 
 cat > /etc/systemd/system/ringclip-playground.service <<'UNIT'
 [Unit]
-Description=LookTwice playground (public mode: Re-run on sample clips, no uploads)
+Description=LookTwice playground (public mode: capped uploads, removed hourly)
 After=ringclip-decider.service
 Wants=ringclip-decider.service
 [Service]
@@ -98,7 +98,7 @@ Environment=DECIDER_TIMEOUT=120
 Environment=VISION_MODEL=${vision_model}
 Environment=BEDROCK_REGION=${region}
 Environment=AWS_DEFAULT_REGION=${region}
-ExecStart=/opt/ringclip/venv/bin/python -m vision.playground --port 8091 --no-upload
+ExecStart=/opt/ringclip/venv/bin/python -m vision.playground --port 8091 --max-upload-mb 20 --uploads-per-hour 3 --upload-note "Uploads are removed every hour."
 Restart=always
 RestartSec=5
 StandardOutput=append:/var/log/ringclip/playground.log
@@ -107,7 +107,7 @@ StandardError=append:/var/log/ringclip/playground.log
 WantedBy=multi-user.target
 UNIT
 
-# nginx in front: public port 80, uploads refused, live model calls rate-limited per visitor
+# nginx in front: public port 80, uploads only on /api/upload (25 MB cap), live model calls rate-limited per visitor
 cat > /etc/nginx/sites-available/ringclip <<'NGINX'
 map $request_method $post_key {
     POST    $binary_remote_addr;
@@ -121,13 +121,25 @@ server {
     client_max_body_size 64k;
     server_tokens off;
 
-    if ($request_method !~ ^(GET|HEAD|POST)$) { return 405; }
+    if ($request_method !~ ^(GET|HEAD|POST|PUT)$) { return 405; }
+
+    location = /api/upload {
+        if ($request_method != PUT) { return 405; }
+        client_max_body_size 25m;
+        proxy_request_buffering off;
+        proxy_pass http://127.0.0.1:8091;
+        proxy_set_header Host 127.0.0.1:8091;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 180s;
+    }
 
     location / {
+        if ($request_method = PUT) { return 405; }
         limit_req zone=live burst=6 nodelay;
         limit_req_status 429;
         proxy_pass http://127.0.0.1:8091;
         proxy_set_header Host 127.0.0.1:8091;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_read_timeout 180s;
         proxy_buffering off;
     }
@@ -136,10 +148,25 @@ NGINX
 ln -sf /etc/nginx/sites-available/ringclip /etc/nginx/sites-enabled/ringclip
 rm -f /etc/nginx/sites-enabled/default
 
-# Every hour, put the original analysis back so every visitor sees the published results
-cat > /etc/cron.d/ringclip-restore <<CRON
-17 * * * * ringclip /usr/local/bin/aws s3 cp s3://${bucket}/samples/ /opt/ringclip/app/web/public/samples/ --recursive --exclude "*" --include "*.timeline.json" --region ${region} --only-show-errors
-CRON
+# Every hour: remove visitors' uploads and put the published analysis back, so every visitor sees the same demo
+cat > /usr/local/bin/ringclip-hourly <<'PY'
+#!/opt/ringclip/venv/bin/python
+import pathlib, subprocess
+BUCKET, REGION = "${bucket}", "${region}"
+SAMPLES = pathlib.Path("/opt/ringclip/app/web/public/samples")
+INBOX = pathlib.Path("/opt/ringclip/app/clips/inbox")
+listing = subprocess.run(["/usr/local/bin/aws", "s3", "ls", "s3://" + BUCKET + "/samples/", "--region", REGION],
+                         capture_output=True, text=True, check=True).stdout
+keep = {line.split()[-1].split(".")[0] for line in listing.splitlines() if line.strip()}
+for folder in (SAMPLES, INBOX):
+    for f in folder.glob("*") if folder.exists() else []:
+        if f.is_file() and f.name not in ("index.json", "inbox.json") and f.name.lstrip(".").split(".")[0] not in keep:
+            f.unlink(missing_ok=True)
+subprocess.run(["/usr/local/bin/aws", "s3", "cp", "s3://" + BUCKET + "/samples/", str(SAMPLES), "--recursive",
+                "--exclude", "*", "--include", "*.timeline.json", "--region", REGION, "--only-show-errors"], check=True)
+PY
+chmod 755 /usr/local/bin/ringclip-hourly
+echo "17 * * * * ringclip /usr/local/bin/ringclip-hourly >> /var/log/ringclip/hourly.log 2>&1" > /etc/cron.d/ringclip-hourly
 
 systemctl daemon-reload
 systemctl enable --now ringclip-decider.service ringclip-playground.service

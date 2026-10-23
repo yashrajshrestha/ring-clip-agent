@@ -81,8 +81,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "samples" {
 }
 
 locals {
-  samples_dir   = "${path.module}/../../web/public/samples"
-  sample_files  = setsubtract(fileset(local.samples_dir, "*.{mp4,json}"), ["inbox.json"])
+  samples_dir = "${path.module}/../../web/public/samples"
+  // Only the published clips go up: never whatever else happens to be in the local results folder.
+  published     = [for l in split("\n", file("${path.module}/../published_clips.txt")) : trimspace(l) if trimspace(l) != "" && !startswith(trimspace(l), "#")]
+  sample_files  = toset(flatten([for c in local.published : ["${c}.mp4", "${c}.timeline.json"]]))
   content_types = { mp4 = "video/mp4", json = "application/json" }
 }
 

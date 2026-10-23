@@ -113,8 +113,10 @@ def safe_clip_name(name: str) -> str | None:
     return f"{stem}{ext}"
 
 
-def make_handler(url: str, samples: Path, inbox: Path | None = None, uploads: bool = True):
+def make_handler(url: str, samples: Path, inbox: Path | None = None, uploads: bool = True,
+                 max_upload: int = MAX_UPLOAD, uploads_per_hour: int = 0, upload_note: str = ""):
     store = EventStore(samples)
+    recent: dict[str, list[float]] = {}   # visitor -> upload times in the last hour (public demo only)
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, payload, ctype: str = "application/json") -> None:
@@ -171,6 +173,7 @@ def make_handler(url: str, samples: Path, inbox: Path | None = None, uploads: bo
                 status_file = samples / "inbox.json"
                 status = json.loads(status_file.read_text()) if status_file.exists() else {}
                 self._send(200, {"enabled": inbox is not None, "uploads": inbox is not None and uploads,
+                                 "max_upload_mb": max_upload >> 20, "upload_note": upload_note,
                                  "folder": str(inbox) if inbox else None, **status})
             elif path.startswith("/samples/"):
                 name = unquote(path[len("/samples/"):])
@@ -193,8 +196,14 @@ def make_handler(url: str, samples: Path, inbox: Path | None = None, uploads: bo
             if name is None:
                 return self._send(400, {"error": f"name must be a video file ({', '.join(sorted(VIDEO_EXT))})"})
             length = int(self.headers.get("content-length", 0))
-            if not 0 < length <= MAX_UPLOAD:
-                return self._send(413, {"error": f"upload must be between 1 byte and {MAX_UPLOAD >> 20} MB"})
+            if not 0 < length <= max_upload:
+                return self._send(413, {"error": f"upload must be between 1 byte and {max_upload >> 20} MB"})
+            if uploads_per_hour:   # behind nginx, which sets X-Real-IP to the visitor's address
+                who, now = self.headers.get("X-Real-IP") or self.client_address[0], time.time()
+                times = [t for t in recent.get(who, []) if now - t < 3600]
+                if len(times) >= uploads_per_hour:
+                    return self._send(429, {"error": f"at most {uploads_per_hour} uploads per hour; try again later"})
+                recent[who] = times + [now]
             inbox.mkdir(parents=True, exist_ok=True)
             tmp = inbox / f".{name}.part"   # hidden while writing, so the watcher ignores it
             with open(tmp, "wb") as f:
@@ -289,6 +298,9 @@ def main() -> None:
     ap.add_argument("--no-detect", action="store_true", help="inbox: skip the object detector")
     ap.add_argument("--no-upload", action="store_true",
                     help="public demo: Re-run and Look harder work on the sample clips, uploads are refused")
+    ap.add_argument("--max-upload-mb", type=int, default=MAX_UPLOAD >> 20, help="largest accepted upload")
+    ap.add_argument("--uploads-per-hour", type=int, default=0, help="per-visitor upload limit (0 = none)")
+    ap.add_argument("--upload-note", default="", help="shown under the drop box, e.g. how long uploads are kept")
     args = ap.parse_args()
     url = os.environ.get("DECIDER_URL", "http://127.0.0.1:8000")
     inbox_dir = None if args.no_inbox else args.inbox
@@ -296,7 +308,9 @@ def main() -> None:
         from .inbox import Inbox
         from .timeline import load_detector
         Inbox(inbox_dir, args.samples, None if args.no_detect else load_detector()).start_thread()
-    srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(url, args.samples, inbox_dir, uploads=not args.no_upload))
+    srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(url, args.samples, inbox_dir, uploads=not args.no_upload,
+                                    max_upload=args.max_upload_mb << 20, uploads_per_hour=args.uploads_per_hour,
+                                    upload_note=args.upload_note))
     print(f"playground on http://127.0.0.1:{args.port} (decider {url}"
           f"{', inbox ' + str(inbox_dir) if inbox_dir else ''})")
     srv.serve_forever()
