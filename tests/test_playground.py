@@ -165,7 +165,7 @@ def test_events_carry_rule_answer_and_pipeline_request(tmp_path):
 def test_page_health_and_event_list(app):
     base, _ = app
     status, html = _get(base + "/")
-    assert status == 200 and b"Decider Playground" in html
+    assert status == 200 and b"Ring Clip Agent" in html
     assert json.loads(_get(base + "/api/health")[1])["ok"] is True
     evs = json.loads(_get(base + "/api/events")[1])
     assert [(e["clip"], e["id"]) for e in evs] == [("porch", 0), ("porch", 1)]

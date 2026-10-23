@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Decider Playground</title>
+<title>Ring Clip Agent: OpenCV 5 doorbell analysis</title>
 <style>
 :root {
   --bg: #f6f7f9; --panel: #fff; --text: #16181d; --muted: #6b7280; --line: #e3e6eb;
@@ -90,8 +90,9 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
 <main>
   <header>
     <div>
-      <h1>Decider Playground</h1>
-      <p class="sub">Drop a doorbell clip: OpenCV finds the events, Strands Decider 2B decides what to do about each one.</p>
+      <h1>Ring Clip Agent</h1>
+      <p class="sub">OpenCV 5 finds what happened in a doorbell clip, Strands Decider 2B decides what to do about each event, and Amazon Bedrock takes a second look when the decider is unsure.</p>
+      <p class="sub"><b>Try it:</b> pick a clip, click an event, and see what OpenCV found and what the agent decided. "Ask the decider again" and "Ask the vision model" run live.</p>
     </div>
     <span class="row">
       <span class="health"><span class="dot" id="dot"></span><span id="health">Checking decider…</span></span>

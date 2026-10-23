@@ -1,0 +1,129 @@
+#!/bin/bash
+# First-boot setup for the Ring Clip Agent demo (Ubuntu 24.04, arm64 / Graviton).
+# Rendered by Terraform; progress goes to /var/log/ringclip/bootstrap.log and CloudWatch.
+set -euxo pipefail
+mkdir -p /var/log/ringclip
+exec > >(tee -a /var/log/ringclip/bootstrap.log) 2>&1
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y python3-venv python3-pip git nginx ffmpeg unzip curl
+
+# AWS CLI v2 (arm64) for the S3 sync
+curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscli.zip
+unzip -q /tmp/awscli.zip -d /tmp && /tmp/aws/install --update
+
+# CloudWatch agent: ship the app logs and memory/CPU metrics
+curl -sSL "https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/arm64/latest/amazon-cloudwatch-agent.deb" -o /tmp/cwagent.deb
+dpkg -i /tmp/cwagent.deb
+cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'JSON'
+{
+  "agent": {"metrics_collection_interval": 60},
+  "logs": {"logs_collected": {"files": {"collect_list": [
+    {"file_path": "/var/log/ringclip/bootstrap.log",  "log_group_name": "${log_group}", "log_stream_name": "{instance_id}/bootstrap"},
+    {"file_path": "/var/log/ringclip/decider.log",    "log_group_name": "${log_group}", "log_stream_name": "{instance_id}/decider"},
+    {"file_path": "/var/log/ringclip/playground.log", "log_group_name": "${log_group}", "log_stream_name": "{instance_id}/playground"},
+    {"file_path": "/var/log/nginx/access.log",        "log_group_name": "${log_group}", "log_stream_name": "{instance_id}/nginx-access"}
+  ]}}},
+  "metrics": {"namespace": "RingClipAgent", "metrics_collected": {
+    "mem": {"measurement": ["mem_used_percent"]},
+    "cpu": {"measurement": ["cpu_usage_active"], "totalcpu": true}
+  }}
+}
+JSON
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+
+# App user, code and Python environment
+id ringclip >/dev/null 2>&1 || useradd --system --create-home --home-dir /opt/ringclip --shell /usr/sbin/nologin ringclip
+cd /opt/ringclip
+rm -rf app && git clone --depth 1 --branch "${repo_ref}" "${repo_url}" app
+python3 -m venv venv
+venv/bin/pip install --upgrade pip
+venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
+venv/bin/pip install -r app/requirements.txt -r app/requirements-decider.txt
+
+# The analysed clips (OpenCV timelines + videos) from the private bucket
+mkdir -p app/web/public/samples
+aws s3 sync "s3://${bucket}/samples/" app/web/public/samples/ --region "${region}" --only-show-errors
+chown -R ringclip:ringclip /opt/ringclip /var/log/ringclip
+
+# Decider weights (adapter + base model), fetched once before the service starts
+sudo -u ringclip HF_HOME=/opt/ringclip/hf /opt/ringclip/venv/bin/python - <<'PY'
+from huggingface_hub import snapshot_download
+snapshot_download("${decider_checkpoint}")
+snapshot_download("Qwen/Qwen3.5-2B-Base")
+PY
+
+cat > /etc/systemd/system/ringclip-decider.service <<'UNIT'
+[Unit]
+Description=Strands Decider 2B (CPU)
+After=network-online.target
+[Service]
+User=ringclip
+Environment=HF_HOME=/opt/ringclip/hf
+Environment=HF_HUB_OFFLINE=1
+ExecStart=/opt/ringclip/venv/bin/strands-decider serve ${decider_checkpoint} --device cpu --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/ringclip/decider.log
+StandardError=append:/var/log/ringclip/decider.log
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+cat > /etc/systemd/system/ringclip-playground.service <<'UNIT'
+[Unit]
+Description=Ring Clip Agent playground (read-only: no uploads)
+After=ringclip-decider.service
+Wants=ringclip-decider.service
+[Service]
+User=ringclip
+WorkingDirectory=/opt/ringclip/app
+Environment=DECIDER_URL=http://127.0.0.1:8000
+Environment=DECIDER_TIMEOUT=120
+Environment=VISION_MODEL=${vision_model}
+Environment=BEDROCK_REGION=${region}
+Environment=AWS_DEFAULT_REGION=${region}
+ExecStart=/opt/ringclip/venv/bin/python -m vision.playground --port 8091 --no-inbox
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/ringclip/playground.log
+StandardError=append:/var/log/ringclip/playground.log
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+# nginx in front: public port 80, uploads refused, live model calls rate-limited per visitor
+cat > /etc/nginx/sites-available/ringclip <<'NGINX'
+map $request_method $post_key {
+    POST    $binary_remote_addr;
+    default "";
+}
+limit_req_zone $post_key zone=live:10m rate=12r/m;
+
+server {
+    listen 80 default_server;
+    server_name _;
+    client_max_body_size 64k;
+    server_tokens off;
+
+    if ($request_method !~ ^(GET|HEAD|POST)$) { return 405; }
+
+    location / {
+        limit_req zone=live burst=6 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8091;
+        proxy_set_header Host 127.0.0.1:8091;
+        proxy_read_timeout 180s;
+        proxy_buffering off;
+    }
+}
+NGINX
+ln -sf /etc/nginx/sites-available/ringclip /etc/nginx/sites-enabled/ringclip
+rm -f /etc/nginx/sites-enabled/default
+
+systemctl daemon-reload
+systemctl enable --now ringclip-decider.service ringclip-playground.service
+nginx -t && systemctl restart nginx
+echo "RINGCLIP BOOTSTRAP DONE"
