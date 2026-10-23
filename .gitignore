@@ -13,3 +13,5 @@ models/*.onnx
 .decider/
 models/*.h
 pets/
+.DS_Store
+docs/builder-center-post.html
