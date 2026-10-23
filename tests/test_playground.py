@@ -165,7 +165,7 @@ def test_events_carry_rule_answer_and_pipeline_request(tmp_path):
 def test_page_health_and_event_list(app):
     base, _ = app
     status, html = _get(base + "/")
-    assert status == 200 and b"Ring Clip Agent" in html
+    assert status == 200 and b"LookTwice" in html
     assert json.loads(_get(base + "/api/health")[1])["ok"] is True
     evs = json.loads(_get(base + "/api/events")[1])
     assert [(e["clip"], e["id"]) for e in evs] == [("porch", 0), ("porch", 1)]
@@ -234,5 +234,20 @@ def test_unreachable_decider_is_a_502(tmp_path):
         status, out = _post(base + "/api/ask", {"state": "x", "questions": {}})
         assert status == 502 and "error" in out
         assert json.loads(_get(base + "/api/health")[1])["ok"] is False
+    finally:
+        srv.shutdown()
+
+
+def test_public_mode_reruns_samples_but_refuses_uploads(tmp_path, fake_decider):
+    url, _ = fake_decider
+    (tmp_path / "porch.mp4").write_bytes(b"video")
+    (tmp_path / "porch.timeline.json").write_text(json.dumps({"events": []}))
+    srv, base = _serve(playground.make_handler(url, tmp_path, tmp_path / "inbox", uploads=False))
+    try:
+        assert _put(base + "/api/upload?name=a.mp4", b"xx")[0] == 403
+        status = json.loads(_get(base + "/api/inbox")[1])
+        assert status["enabled"] is True and status["uploads"] is False
+        code, body = _post(base + "/api/rerun", {"clip": "porch"})
+        assert code == 200 and (tmp_path / "inbox" / "porch.mp4").exists()
     finally:
         srv.shutdown()

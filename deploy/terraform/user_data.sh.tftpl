@@ -43,6 +43,19 @@ venv/bin/pip install --upgrade pip
 venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
 venv/bin/pip install -r app/requirements.txt -r app/requirements-decider.txt
 
+# OpenCV Model Zoo YOLOX-S detector for live Re-run / Look harder, checked by hash
+cd /opt/ringclip/app && /opt/ringclip/venv/bin/python - <<'PY'
+import hashlib, os, urllib.request
+from vision import detector as m
+dst = os.path.join("models", m.MODEL_FILE)
+os.makedirs("models", exist_ok=True)
+urllib.request.urlretrieve(m.MODEL_URL, dst)
+digest = hashlib.sha256(open(dst, "rb").read()).hexdigest()
+assert digest == m.MODEL_SHA256, f"model hash mismatch: {digest}"
+print("detector ok", os.path.getsize(dst))
+PY
+cd /opt/ringclip
+
 # The analysed clips (OpenCV timelines + videos) from the private bucket
 mkdir -p app/web/public/samples
 aws s3 sync "s3://${bucket}/samples/" app/web/public/samples/ --region "${region}" --only-show-errors
@@ -74,7 +87,7 @@ UNIT
 
 cat > /etc/systemd/system/ringclip-playground.service <<'UNIT'
 [Unit]
-Description=Ring Clip Agent playground (read-only: no uploads)
+Description=LookTwice playground (public mode: Re-run on sample clips, no uploads)
 After=ringclip-decider.service
 Wants=ringclip-decider.service
 [Service]
@@ -85,7 +98,7 @@ Environment=DECIDER_TIMEOUT=120
 Environment=VISION_MODEL=${vision_model}
 Environment=BEDROCK_REGION=${region}
 Environment=AWS_DEFAULT_REGION=${region}
-ExecStart=/opt/ringclip/venv/bin/python -m vision.playground --port 8091 --no-inbox
+ExecStart=/opt/ringclip/venv/bin/python -m vision.playground --port 8091 --no-upload
 Restart=always
 RestartSec=5
 StandardOutput=append:/var/log/ringclip/playground.log
@@ -122,6 +135,11 @@ server {
 NGINX
 ln -sf /etc/nginx/sites-available/ringclip /etc/nginx/sites-enabled/ringclip
 rm -f /etc/nginx/sites-enabled/default
+
+# Every hour, put the original analysis back so every visitor sees the published results
+cat > /etc/cron.d/ringclip-restore <<CRON
+17 * * * * ringclip /usr/local/bin/aws s3 cp s3://${bucket}/samples/ /opt/ringclip/app/web/public/samples/ --recursive --exclude "*" --include "*.timeline.json" --region ${region} --only-show-errors
+CRON
 
 systemctl daemon-reload
 systemctl enable --now ringclip-decider.service ringclip-playground.service

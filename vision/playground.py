@@ -113,7 +113,7 @@ def safe_clip_name(name: str) -> str | None:
     return f"{stem}{ext}"
 
 
-def make_handler(url: str, samples: Path, inbox: Path | None = None):
+def make_handler(url: str, samples: Path, inbox: Path | None = None, uploads: bool = True):
     store = EventStore(samples)
 
     class Handler(BaseHTTPRequestHandler):
@@ -170,7 +170,8 @@ def make_handler(url: str, samples: Path, inbox: Path | None = None):
             elif path == "/api/inbox":
                 status_file = samples / "inbox.json"
                 status = json.loads(status_file.read_text()) if status_file.exists() else {}
-                self._send(200, {"enabled": inbox is not None, "folder": str(inbox) if inbox else None, **status})
+                self._send(200, {"enabled": inbox is not None, "uploads": inbox is not None and uploads,
+                                 "folder": str(inbox) if inbox else None, **status})
             elif path.startswith("/samples/"):
                 name = unquote(path[len("/samples/"):])
                 video = samples / name
@@ -186,6 +187,8 @@ def make_handler(url: str, samples: Path, inbox: Path | None = None):
                 return self._send(404, {"error": "not found"})
             if inbox is None:
                 return self._send(503, {"error": "the inbox is disabled on this server"})
+            if not uploads:   # public demo: the sample clips can be re-run, nothing new comes in
+                return self._send(403, {"error": "uploads are turned off on this server; use Re-run on a sample clip"})
             name = safe_clip_name(parse_qs(parts.query).get("name", [""])[0])
             if name is None:
                 return self._send(400, {"error": f"name must be a video file ({', '.join(sorted(VIDEO_EXT))})"})
@@ -284,6 +287,8 @@ def main() -> None:
     ap.add_argument("--inbox", type=Path, default=Path("clips/inbox"))
     ap.add_argument("--no-inbox", action="store_true", help="do not watch or accept new clips")
     ap.add_argument("--no-detect", action="store_true", help="inbox: skip the object detector")
+    ap.add_argument("--no-upload", action="store_true",
+                    help="public demo: Re-run and Look harder work on the sample clips, uploads are refused")
     args = ap.parse_args()
     url = os.environ.get("DECIDER_URL", "http://127.0.0.1:8000")
     inbox_dir = None if args.no_inbox else args.inbox
@@ -291,7 +296,7 @@ def main() -> None:
         from .inbox import Inbox
         from .timeline import load_detector
         Inbox(inbox_dir, args.samples, None if args.no_detect else load_detector()).start_thread()
-    srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(url, args.samples, inbox_dir))
+    srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(url, args.samples, inbox_dir, uploads=not args.no_upload))
     print(f"playground on http://127.0.0.1:{args.port} (decider {url}"
           f"{', inbox ' + str(inbox_dir) if inbox_dir else ''})")
     srv.serve_forever()

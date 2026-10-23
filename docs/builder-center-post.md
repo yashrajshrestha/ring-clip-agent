@@ -2,9 +2,9 @@
 
 ![Decide Cheap, Look Twice](images/00-cover.jpg)
 
-**Demo video (2:55):** https://youtu.be/ivwJz-WfAxc
-**Code (MIT):** https://github.com/yashrajshrestha/ring-clip-agent
-**Decision pattern:** Policy, plus confidence-based routing to Amazon Bedrock
+- **Demo video (2:55):** [youtu.be/ivwJz-WfAxc](https://youtu.be/ivwJz-WfAxc)
+- **Code (MIT):** [github.com/yashrajshrestha/ring-clip-agent](https://github.com/yashrajshrestha/ring-clip-agent)
+- **Decision pattern:** Policy, plus confidence-based routing to Amazon Bedrock
 
 ## The problem
 

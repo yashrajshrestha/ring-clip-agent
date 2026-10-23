@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ring Clip Agent: OpenCV 5 doorbell analysis</title>
+<title>LookTwice: smart doorbell alerts with OpenCV 5</title>
 <style>
 :root {
   --bg: #f6f7f9; --panel: #fff; --text: #16181d; --muted: #6b7280; --line: #e3e6eb;
@@ -90,9 +90,9 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
 <main>
   <header>
     <div>
-      <h1>Ring Clip Agent</h1>
+      <h1>LookTwice</h1>
       <p class="sub">OpenCV 5 finds what happened in a doorbell clip, Strands Decider 2B decides what to do about each event, and Amazon Bedrock takes a second look when the decider is unsure.</p>
-      <p class="sub"><b>Try it:</b> pick a clip, click an event, and see what OpenCV found and what the agent decided. "Ask the decider again" and "Ask the vision model" run live.</p>
+      <p class="sub"><b>Try it:</b> pick a clip, click an event, and see what OpenCV found and what the agent decided. "Re-run" sends the clip through OpenCV again, live; "Ask the decider again" and "Ask the vision model" also run live.</p>
     </div>
     <span class="row">
       <span class="health"><span class="dot" id="dot"></span><span id="health">Checking decider…</span></span>
@@ -159,6 +159,10 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
       <p class="muted">Pick an event. The decider gets the same state text the pipeline sends, including the last 3 events before it.</p>
     </div>
   </section>
+  <footer class="sub" style="margin:28px 0 8px;font-size:13px;opacity:.8">
+    Independent project, not affiliated with or endorsed by Ring LLC. Demo clips: RingTV (Ring LLC), licensed
+    Creative Commons Attribution (CC BY 3.0); stock clips: Pexels. Code: github.com/yashrajshrestha/ring-clip-agent (MIT).
+  </footer>
 </main>
 
 <script>
@@ -580,7 +584,10 @@ setInterval(checkHealth, 15000);
 loadEvents();
 $("clip").onchange = renderEvents;
 setInterval(refreshQueue, 2000);
-fetch("/api/inbox").then((r) => r.json()).then((s) => { if (!s.enabled) { drop.hidden = true; $("rerun").hidden = true; $("harder").hidden = true; } }).catch(() => {});
+fetch("/api/inbox").then((r) => r.json()).then((s) => {
+  if (!s.enabled) { drop.hidden = true; $("rerun").hidden = true; $("harder").hidden = true; }
+  else if (s.uploads === false) drop.hidden = true;   // public demo: Re-run and Look harder only
+}).catch(() => {});
 </script>
 </body>
 </html>
