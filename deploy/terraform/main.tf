@@ -1,5 +1,6 @@
 // Ring Clip Agent demo on AWS: one Graviton instance running the playground (OpenCV 5 analysis results,
 // Strands Decider 2B on CPU, Amazon Bedrock second looks) behind nginx, with the analysed clips in S3.
+// By default the instance boots COOL's Graviton4 image and the pipeline uses COOL's OpenCV build.
 //
 //   terraform init && terraform apply      # build (about 10-15 minutes until the page answers)
 //   terraform destroy                      # remove everything
@@ -178,7 +179,7 @@ resource "aws_cloudwatch_log_group" "app" {
 // ---------------------------------------------------------------- the instance
 
 resource "aws_instance" "app" {
-  ami                    = data.aws_ami.ubuntu_arm64.id
+  ami                    = var.ami_id != "" ? var.ami_id : data.aws_ami.ubuntu_arm64.id
   instance_type          = var.instance_type
   subnet_id              = sort(data.aws_subnets.default.ids)[0]
   vpc_security_group_ids = [aws_security_group.web.id]
@@ -203,6 +204,7 @@ resource "aws_instance" "app" {
     decider_checkpoint = var.decider_checkpoint
     vision_model       = "bedrock:${var.bedrock_models[0]}"
     log_group          = aws_cloudwatch_log_group.app.name
+    use_cool           = var.use_cool
   })
   user_data_replace_on_change = true
 

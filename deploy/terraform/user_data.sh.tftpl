@@ -23,7 +23,8 @@ cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'JSON'
     {"file_path": "/var/log/ringclip/bootstrap.log",  "log_group_name": "${log_group}", "log_stream_name": "{instance_id}/bootstrap"},
     {"file_path": "/var/log/ringclip/decider.log",    "log_group_name": "${log_group}", "log_stream_name": "{instance_id}/decider"},
     {"file_path": "/var/log/ringclip/playground.log", "log_group_name": "${log_group}", "log_stream_name": "{instance_id}/playground"},
-    {"file_path": "/var/log/nginx/access.log",        "log_group_name": "${log_group}", "log_stream_name": "{instance_id}/nginx-access"}
+    {"file_path": "/var/log/nginx/access.log",        "log_group_name": "${log_group}", "log_stream_name": "{instance_id}/nginx-access"},
+    {"file_path": "/var/log/ringclip/coolbench.log",  "log_group_name": "${log_group}", "log_stream_name": "{instance_id}/coolbench"}
   ]}}},
   "metrics": {"namespace": "RingClipAgent", "metrics_collected": {
     "mem": {"measurement": ["mem_used_percent"]},
@@ -68,6 +69,29 @@ snapshot_download("${decider_checkpoint}")
 snapshot_download("Qwen/Qwen3.5-2B-Base")
 PY
 
+# Which OpenCV build the pipeline uses: COOL's (/opt/cool) when the image has it and it imports, else the pip wheel
+mkdir -p /etc/ringclip
+: > /etc/ringclip/opencv.env
+COOL_ENV="PYTHONPATH=/opt/cool/python_3.12/site-packages LD_LIBRARY_PATH=/opt/cool/cpp_sdk/lib"
+%{ if use_cool ~}
+SAMPLE=$(ls /opt/ringclip/app/web/public/samples/*.mp4 | head -1)
+if sudo -u ringclip env $COOL_ENV /opt/ringclip/venv/bin/python -c "import cv2, sys; ok = cv2.VideoCapture(sys.argv[1]).read()[0]; print('COOL OpenCV', cv2.__version__, cv2.__file__, 'reads mp4:', ok); sys.exit(0 if ok else 1)" "$SAMPLE"; then
+  printf 'PYTHONPATH=/opt/cool/python_3.12/site-packages\nLD_LIBRARY_PATH=/opt/cool/cpp_sdk/lib\n' > /etc/ringclip/opencv.env
+  # Measure both builds on the published clips before anything else competes for the CPU
+  cd /opt/ringclip/app
+  CLIPS=$(ls web/public/samples/*.mp4)
+  {
+    sudo -u ringclip /opt/ringclip/venv/bin/python -m vision.coolbench run --label pip $CLIPS > /tmp/pip.json 2>> /var/log/ringclip/coolbench.log
+    sudo -u ringclip env $COOL_ENV /opt/ringclip/venv/bin/python -m vision.coolbench run --label cool $CLIPS > /tmp/cool.json 2>> /var/log/ringclip/coolbench.log
+    /opt/ringclip/venv/bin/python -m vision.coolbench compare /tmp/pip.json /tmp/cool.json >> /var/log/ringclip/coolbench.log
+    cp /tmp/pip.json /tmp/cool.json /var/log/ringclip/
+  } || echo "coolbench failed; the demo starts anyway" >> /var/log/ringclip/coolbench.log
+  cd /opt/ringclip
+else
+  echo "COOL OpenCV did not import; the pipeline uses the pip wheel" | tee -a /var/log/ringclip/coolbench.log
+fi
+%{ endif ~}
+
 cat > /etc/systemd/system/ringclip-decider.service <<'UNIT'
 [Unit]
 Description=Strands Decider 2B (CPU)
@@ -98,6 +122,7 @@ Environment=DECIDER_TIMEOUT=120
 Environment=VISION_MODEL=${vision_model}
 Environment=BEDROCK_REGION=${region}
 Environment=AWS_DEFAULT_REGION=${region}
+EnvironmentFile=/etc/ringclip/opencv.env
 ExecStart=/opt/ringclip/venv/bin/python -m vision.playground --port 8091 --max-upload-mb 20 --uploads-per-hour 3 --upload-note "Uploads are removed every hour."
 Restart=always
 RestartSec=5
