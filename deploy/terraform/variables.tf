@@ -13,19 +13,19 @@ variable "region" {
 variable "instance_type" {
   description = "Graviton instance: Decider 2B needs about 5.5 GB of RAM on CPU, so 16 GB leaves headroom. COOL's Graviton4 image runs on c8g, m8g and r8g."
   type        = string
-  default     = "m8g.xlarge"
+  default     = "t4g.xlarge"
 }
 
 variable "ami_id" {
-  description = "Machine image. Default: COOL (Cloud-Optimized OpenCV Library) for Graviton4 from AWS Marketplace, Ubuntu 24.04; subscribe once in the Marketplace first. Empty string: plain Canonical Ubuntu 24.04 arm64."
+  description = "Machine image. Empty: Canonical Ubuntu 24.04 arm64. For COOL (Cloud-Optimized OpenCV Library) on Graviton4, subscribe in AWS Marketplace and set ami-033e481a24f94c8cb with a c8g, m8g or r8g instance and use_cool = true."
   type        = string
-  default     = "ami-033e481a24f94c8cb"
+  default     = ""
 }
 
 variable "use_cool" {
   description = "Run the pipeline on COOL's OpenCV build (/opt/cool) instead of the pip wheel. Needs the COOL image."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "disk_gb" {

@@ -94,16 +94,19 @@ def is_ir(frame: np.ndarray, mask: np.ndarray | None = None) -> bool:
     walking through a dull scene does not read as a mode switch."""
     if frame.ndim != 3:
         return True
-    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    _, sat, val = cv2.split(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV))
     # Share of clearly coloured pixels, not mean saturation: one coloured box
     # on a gray porch must not flip the mode. Dark pixels are skipped because
-    # compression noise gives them high saturation.
-    valid = hsv[:, :, 2] > 40
+    # compression noise gives them high saturation. Counted with OpenCV rather
+    # than numpy boolean indexing (same counts, vectorised on Arm NEON).
+    valid = cv2.threshold(val, 40, 255, cv2.THRESH_BINARY)[1]
     if mask is not None:
-        valid &= mask
-    if not valid.any():
+        valid = cv2.bitwise_and(valid, mask.view(np.uint8) if mask.dtype == bool else mask)
+    n = cv2.countNonZero(valid)
+    if n == 0:
         return True
-    return float((hsv[:, :, 1][valid] > IR_SAT_MAX).mean()) < IR_COLOUR_SHARE
+    coloured = cv2.countNonZero(cv2.bitwise_and(cv2.threshold(sat, IR_SAT_MAX, 255, cv2.THRESH_BINARY)[1], valid))
+    return coloured / n < IR_COLOUR_SHARE
 
 
 def motion_region(frames: list[np.ndarray]) -> dict:

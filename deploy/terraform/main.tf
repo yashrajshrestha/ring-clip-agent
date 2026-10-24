@@ -1,6 +1,6 @@
 // Ring Clip Agent demo on AWS: one Graviton instance running the playground (OpenCV 5 analysis results,
 // Strands Decider 2B on CPU, Amazon Bedrock second looks) behind nginx, with the analysed clips in S3.
-// By default the instance boots COOL's Graviton4 image and the pipeline uses COOL's OpenCV build.
+// Optional: COOL's Graviton4 image and OpenCV build (variables ami_id, use_cool).
 //
 //   terraform init && terraform apply      # build (about 10-15 minutes until the page answers)
 //   terraform destroy                      # remove everything

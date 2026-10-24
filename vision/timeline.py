@@ -9,11 +9,15 @@ Writes a browser-safe H.264 copy of each clip, `<name>.timeline.json`, and
 from __future__ import annotations
 
 import json
+import os
+import queue
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import cv2
@@ -193,6 +197,62 @@ def _mostly_inside(run: tuple[int, int], others: list[tuple[int, int]], share: f
     return covered / (e - s + 1) >= share
 
 
+# PIPELINE_PARALLEL=0 turns both overlaps off (frames read inline, detector inline), to
+# measure what they save on a given machine (vision/coolbench.py).
+PARALLEL = os.environ.get("PIPELINE_PARALLEL", "1") != "0"
+
+# One detector thread for the process: cv2.dnn releases the GIL while it runs, and a
+# single worker keeps one forward pass on the network at a time.
+_DETECT_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="detector")
+
+
+def _detect(detector, frame: np.ndarray, zoom_box: list[float] | None) -> list[dict]:
+    objs = detector.detect(frame)
+    return objs + zoomed_detect(detector, frame, zoom_box) if zoom_box else objs
+
+
+def _prefetch(cap, depth: int = 8):
+    """Yield (analysis-size frame, position in ms), decoded and resized on a second
+    thread while this one analyses the previous frame. OpenCV releases the GIL
+    while it decodes and resizes, so the two really overlap on a multi-core CPU."""
+    q: queue.Queue = queue.Queue(maxsize=depth)
+    stop = threading.Event()
+
+    def read() -> None:
+        while not stop.is_set():
+            ok, frame = cap.read()
+            item = None
+            if ok:
+                scale = ANALYSIS_WIDTH / frame.shape[1]
+                small = cv2.resize(frame, (ANALYSIS_WIDTH, round(frame.shape[0] * scale)), interpolation=cv2.INTER_AREA)
+                item = (small, cap.get(cv2.CAP_PROP_POS_MSEC))
+            while not stop.is_set():
+                try:
+                    q.put(item, timeout=0.1)
+                    break
+                except queue.Full:
+                    continue
+            if item is None:
+                return
+
+    if not PARALLEL:
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                return
+            scale = ANALYSIS_WIDTH / frame.shape[1]
+            yield (cv2.resize(frame, (ANALYSIS_WIDTH, round(frame.shape[0] * scale)), interpolation=cv2.INTER_AREA),
+                   cap.get(cv2.CAP_PROP_POS_MSEC))
+    worker = threading.Thread(target=read, daemon=True)
+    worker.start()
+    try:
+        while (item := q.get()) is not None:
+            yield item
+    finally:
+        stop.set()   # the reader may be waiting on a full queue when a run is cancelled
+        worker.join()
+
+
 def build_timeline(path: str | Path, detector=None, progress=None) -> dict:
     """`detector` is anything with detect(bgr) -> [{label, group, score, box}],
     normally vision.detector.Detector. None skips object labels."""
@@ -220,32 +280,36 @@ def build_timeline(path: str | Path, detector=None, progress=None) -> dict:
     cut_cooldown = 0
     det_every = max(1, round(fps / DETECT_HZ))
     last_det, last_objs = -det_every, []
+    pending: list[tuple] = []   # (detector future, the objs list its frames share)
     i = 0
+    reader = _prefetch(cap)
     while True:
-        ok, frame = cap.read()
-        if not ok:
+        item = next(reader, None)
+        if item is None:
             break
-        t = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+        small, pos_ms = item
+        t = pos_ms / 1000.0
         if i > 0 and t <= frames[-1]["t"]:
             t = i / fps  # some backends report 0 or repeat; fall back to frame index
-        scale = ANALYSIS_WIDTH / frame.shape[1]
-        small = cv2.resize(frame, (ANALYSIS_WIDTH, round(frame.shape[0] * scale)), interpolation=cv2.INTER_AREA)
         sh, sw = small.shape[:2]
         masked = mask_overlays(small)
 
         # Judge lighting on background pixels only, so a jacket or a body close
-        # to the lens does not look like a camera mode switch.
+        # to the lens does not look like a camera mode switch. Masks and counts
+        # stay in OpenCV (uint8, countNonZero, mean with a mask): same numbers
+        # as numpy boolean indexing, without the copies.
         bg_px = None
         if prev_fg is not None:
-            keep = cv2.dilate(prev_fg, join) == 0
-            bg_px = keep if keep.mean() > 0.3 else None
+            keep = cv2.compare(cv2.dilate(prev_fg, join), 0, cv2.CMP_EQ)
+            bg_px = keep if cv2.countNonZero(keep) / keep.size > 0.3 else None
         ir_raw = is_ir(small, bg_px)
         gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-        bright = float((gray[bg_px] if bg_px is not None else gray).mean())
+        bright = float(cv2.mean(gray, mask=bg_px)[0])
         # Live footage always flickers a little (sensor and compression noise);
         # an end card or title graphic does not change at all.
-        core = inner(gray).astype(np.int16)
-        stills.append(float((core == prev_core).mean()) if prev_core is not None else 0.0)
+        core = inner(gray)
+        stills.append(cv2.countNonZero(cv2.compare(core, prev_core, cv2.CMP_EQ)) / core.size
+                      if prev_core is not None else 0.0)
         prev_core = core
 
         # Cut, zoom or dissolve: every quadrant changes against half a second
@@ -305,20 +369,25 @@ def build_timeline(path: str | Path, detector=None, progress=None) -> dict:
 
         # YOLOX only while something moves, and only DETECT_HZ times a second:
         # it costs ~0.3 s a frame on CPU. Frames in between reuse the last result.
+        # It runs on the detector thread while this loop moves on to the next
+        # frames; the answer fills the same list these frames share once it lands.
         objs: list[dict] = []
         if detector is not None and box is not None:
             if i - last_det >= det_every:
-                last_objs, last_det = detector.detect(small), i
                 # Small figures in the dark need the zoom; under the harder profile every motion gets it.
-                if ZOOM_MOTION or bright < ZOOM_DARK_BRIGHT or (ir and bright < ZOOM_IR_BRIGHT):
-                    last_objs = last_objs + zoomed_detect(detector, small, box)
+                zoom = ZOOM_MOTION or bright < ZOOM_DARK_BRIGHT or (ir and bright < ZOOM_IR_BRIGHT)
+                last_objs, last_det = [], i
+                if PARALLEL:
+                    pending.append((_DETECT_POOL.submit(_detect, detector, small, box if zoom else None), last_objs))
+                else:
+                    last_objs.extend(_detect(detector, small, box if zoom else None))
             objs = last_objs
         else:
             last_det = -det_every
 
         frames.append({
             "t": round(t, 3), "box": box, "area": round(area, 4),
-            "blur": round(blur_score(inner(small)), 1), "bright": round(bright, 1), "ir": ir,
+            "blur": round(blur_score(core), 1), "bright": round(bright, 1), "ir": ir,
             "objs": objs,
         })
         thumbs.append(cv2.resize(masked, (160, round(160 * sh / sw)), interpolation=cv2.INTER_AREA))
@@ -326,6 +395,8 @@ def build_timeline(path: str | Path, detector=None, progress=None) -> dict:
         if i % 15 == 0:
             report("analyse", i, max(total_frames, i))
     cap.release()
+    for future, shared in pending:
+        shared.extend(future.result())
     report("analyse", i, i)
 
     events = _motion_events(frames, thumbs, fps, [0] + [idx for idx, _ in marks])

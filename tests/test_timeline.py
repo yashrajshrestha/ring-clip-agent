@@ -227,3 +227,20 @@ def test_browser_copy_is_h264(clip, tmp_path):
     fourcc = int(cap.get(cv2.CAP_PROP_FOURCC)).to_bytes(4, "little").decode()
     cap.release()
     assert fourcc in ("avc1", "h264")
+
+
+def test_prefetch_yields_every_frame_at_analysis_width(clip):
+    n = int(cv2.VideoCapture(str(clip)).get(cv2.CAP_PROP_FRAME_COUNT))
+    got = list(timeline._prefetch(cv2.VideoCapture(str(clip))))
+    assert len(got) == n
+    assert all(f.shape[1] == timeline.ANALYSIS_WIDTH for f, _ in got)
+    assert [ms for _, ms in got] == sorted(ms for _, ms in got)
+
+
+def test_prefetch_stops_its_reader_when_the_run_stops_early(clip):
+    reader = timeline._prefetch(cv2.VideoCapture(str(clip)), depth=2)
+    next(reader)
+    reader.close()   # a cancelled run: the reader thread is waiting on a full queue and must exit
+    import threading
+    assert not any(t.is_alive() and t.name != "MainThread" and "detector" not in t.name
+                   for t in threading.enumerate() if t.daemon)

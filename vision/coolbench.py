@@ -1,14 +1,18 @@
-"""Time the pipeline's own OpenCV work under two OpenCV builds: pip OpenCV 5 and COOL.
+"""Time the pipeline's own OpenCV work under two builds or two settings, on one machine.
 
+    # two OpenCV builds: the pip wheel and COOL
     python -m vision.coolbench run --label pip  clip1.mp4 clip2.mp4 ... > pip.json
     PYTHONPATH=/opt/cool/python_3.12/site-packages LD_LIBRARY_PATH=/opt/cool/cpp_sdk/lib \
       python -m vision.coolbench run --label cool clip1.mp4 clip2.mp4 ... > cool.json
-    python -m vision.coolbench compare pip.json cool.json > eval/cool.md
+    # two pipeline settings: no overlap vs frames and detector alongside the analysis
+    PIPELINE_PARALLEL=0 python -m vision.coolbench run --label serial clip1.mp4 ... > serial.json
+    python -m vision.coolbench run --label parallel clip1.mp4 ... > parallel.json
+    python -m vision.coolbench compare serial.json parallel.json > eval/speed.md
 
-Run both on the same instance, one after the other, so only the OpenCV build
-differs. Each step is the code the pipeline runs (checks, enhance, detector,
-the MOG2 motion pass), timed on real frames from the clips; the median of
-REPEATS runs is kept. `timeline` is the whole OpenCV pass over each clip
+Run both on the same instance, one after the other, so only the build or the
+setting differs. Each step is the code the pipeline runs (checks, enhance,
+detector, the MOG2 motion pass), timed on real frames from the clips; the median
+of REPEATS runs is kept. `timeline` is the whole OpenCV pass over each clip
 (build_timeline with the detector and no decider), wall clock.
 """
 from __future__ import annotations
@@ -102,7 +106,7 @@ def run(label: str, clips: list[str]) -> dict:
 def compare(a: dict, b: dict) -> str:
     def speed(x: float, y: float) -> str:
         return f"{x / y:.2f}x" if y else "n/a"
-    lines = [f"# OpenCV build comparison: {a['label']} vs {b['label']}", "",
+    lines = [f"# Speed comparison: {a['label']} vs {b['label']}", "",
              f"Same machine ({a['machine']}, {a['cpus']} CPUs). {a['label']}: OpenCV {a['opencv']} "
              f"(KleidiCV {'yes' if a['kleidicv'] else 'no'}); {b['label']}: OpenCV {b['opencv']} "
              f"(KleidiCV {'yes' if b['kleidicv'] else 'no'}). {a['frames']} real frames from the clips, "

@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 
 MODEL_FILE = "object_detection_yolox_2022nov.onnx"
+FP16 = os.environ.get("DETECTOR_FP16") == "1"
 MODEL_URL = f"https://huggingface.co/opencv/object_detection_yolox/resolve/main/{MODEL_FILE}"
 MODEL_SHA256 = "c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063"
 INPUT = 640
@@ -97,7 +98,15 @@ class Detector:
     # conf 0.5, not the zoo's 0.35: on real porch clips a pile of bags scored
     # "person 0.41" while real people scored 0.73 to 0.90.
     def __init__(self, path: str | Path | None = None, conf: float = 0.5, nms: float = 0.5):
-        self.net = cv2.dnn.readNet(str(path or default_model_path()))
+        if FP16:
+            # Half-precision inference on Arm (Graviton, Apple silicon); needs the classic engine,
+            # since OpenCV 5's new engine ignores targets. Measured 1.18x on an M2 Pro, with one
+            # borderline detection in 40 frames changing, so it is opt-in.
+            self.net = cv2.dnn.readNetFromONNX(str(path or default_model_path()), engine=cv2.dnn.ENGINE_CLASSIC)
+            self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+            self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU_FP16)
+        else:
+            self.net = cv2.dnn.readNet(str(path or default_model_path()))
         self.conf, self.nms = conf, nms
 
     def detect(self, bgr: np.ndarray) -> list[dict]:
