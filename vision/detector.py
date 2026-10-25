@@ -102,12 +102,14 @@ class Detector:
         if ENGINE == "new":
             self.net = cv2.dnn.readNet(str(path or default_model_path()))
         else:
-            # OpenCV 5's classic dnn engine: YOLOX-S runs 2.65x faster than on the new engine on
-            # Graviton2 (t4g), same objects; 1.03x on an M2 Pro.
+            # OpenCV 5's classic dnn engine: YOLOX-S runs 1.97x faster than on the new engine on
+            # Graviton2 (t4g.xlarge, eval/speed-graviton.md), same events; 1.03x on an M2 Pro.
             self.net = cv2.dnn.readNetFromONNX(str(path or default_model_path()), engine=cv2.dnn.ENGINE_CLASSIC)
             if FP16:
-                # Half precision where the CPU has it (Apple silicon: a further 1.15x; Graviton2 falls
-                # back to FP32). One borderline detection in 40 frames changed, so it is opt-in.
+                # Half precision where the CPU has it (Apple silicon: a further 1.15x). On Graviton2
+                # OpenCV logs a fall back to the FP32 CPU target, yet measured 2.65x over the new engine
+                # (vs 1.97x without this setting). One borderline detection in 40 frames changed on the
+                # M2 Pro, so it is opt-in.
                 self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
                 self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU_FP16)
         self.conf, self.nms = conf, nms

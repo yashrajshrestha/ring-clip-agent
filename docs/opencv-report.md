@@ -69,6 +69,25 @@ All vision work uses OpenCV 5 (`opencv-python-headless==5.0.0.93`) on CPU, on a 
 
 Thresholds were tuned on the labelled clips; the measured values are recorded next to each constant in the code.
 
+### Making the OpenCV pass fast on Arm
+
+The server is an Arm (Graviton2) machine, so the OpenCV pass was tuned for it, without changing any result:
+
+| Change | What it does |
+|---|---|
+| Frames read ahead | a second thread decodes and resizes the next frames while the loop checks this one (`_prefetch`); OpenCV releases the GIL, so the two really overlap |
+| Detector alongside | YOLOX runs on its own thread, one forward pass at a time; its answer fills the frames that share it |
+| Classic dnn engine | YOLOX loads on OpenCV 5's classic engine (`DETECTOR_ENGINE=classic`, now the default): 1.97× faster than the new engine on Graviton2 |
+| Counting in OpenCV | masks and counts use `compare`, `countNonZero` and `mean` with a mask instead of numpy boolean indexing; grayscale once per frame |
+
+Measured on the demo server itself (t4g.xlarge, at first boot, `vision/coolbench.py`, results in
+[eval/speed-graviton.md](../eval/speed-graviton.md)): the whole OpenCV pass over the 10 published clips went from
+**177.1 s to 113.0 s (1.57×)**, with the same number of events in every clip. On the M2 Pro, where the full event
+lists were compared, all 10 clips produce identical events; one frame's brightness rounds differently in the last
+decimal (74.6 vs 74.7). `PIPELINE_PARALLEL=0 DETECTOR_ENGINE=new` restores the old path for comparison.
+`DETECTOR_FP16=1` is an opt-in half-precision setting: on the M2 Pro it changed one borderline detection in 40
+frames, and on Graviton2 OpenCV reports falling back to FP32.
+
 ## 5. The agentic loop
 
 The Agentic Vision rules ask that vision results change what the system does next. In LookTwice they do, in four
@@ -139,12 +158,16 @@ behind nginx.
 - IMDSv2 only.
 
 **Measured:**
+- The OpenCV pass over the 10 published clips: 177.1 s before the Arm tuning, 113.0 s after (1.57×), timed at
+  first boot and logged to CloudWatch (section 4).
 - A live Decider 2B call takes about 7 to 8 s on the Graviton CPU (0.5 s on an Apple M2 Pro), using about 5.5 GB
   of memory.
 - Running cost is about $3.30 a day, mostly the instance; about $0.23 a day when stopped between judging
   sessions.
 
-The Best Use of COOL Award is not claimed: the server runs the standard OpenCV 5 wheel on Graviton.
+The Best Use of COOL Award is not claimed: the server runs the standard OpenCV 5 wheel (with KleidiCV) on
+Graviton. The Terraform can switch to COOL's Graviton4 image (`ami_id`, `use_cool`); the boot benchmark then also
+compares the pip wheel with COOL on the same machine.
 
 **Reproduce:**
 
@@ -245,7 +268,7 @@ During development, measured on the same clips and on stock clips:
 
     python -m venv .venv && . .venv/bin/activate
     pip install -r requirements-dev.txt          # pinned: OpenCV 5.0.0.93, numpy, boto3, pytest
-    pytest                                       # 114 passed, 1 skipped
+    pytest                                       # 117 passed, 1 skipped
     pip install torch --index-url https://download.pytorch.org/whl/cpu
     pip install -r requirements-decider.txt -r requirements-agent.txt
     strands-decider serve StrandsAgents/strands-decider-2B-qwen3.5-v1-2610 --device cpu
