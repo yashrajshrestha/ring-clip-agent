@@ -92,19 +92,17 @@ else
 fi
 %{ endif ~}
 
-# What the pipeline's own optimisations save on this machine: frames read and the detector run
-# alongside the analysis (PIPELINE_PARALLEL) and the Arm FP16 detector (DETECTOR_FP16), timed on
-# the published clips before the services compete for the CPU. Results go to CloudWatch.
+# What the pipeline's own optimisations save on this machine: the old path (frames and YOLOX inline,
+# OpenCV 5's new dnn engine) against the default (frames read and YOLOX run alongside the analysis,
+# classic dnn engine), timed on the published clips before the services compete for the CPU.
 cd /opt/ringclip/app
 CLIPS=$(ls web/public/samples/*.mp4)
 BENCH="sudo -u ringclip env $(cat /etc/ringclip/opencv.env | tr '\n' ' ')"
 {
-  $BENCH PIPELINE_PARALLEL=0 /opt/ringclip/venv/bin/python -m vision.coolbench run --label serial $CLIPS > /tmp/serial.json 2>> /var/log/ringclip/coolbench.log
-  $BENCH /opt/ringclip/venv/bin/python -m vision.coolbench run --label parallel $CLIPS > /tmp/parallel.json 2>> /var/log/ringclip/coolbench.log
-  $BENCH DETECTOR_FP16=1 /opt/ringclip/venv/bin/python -m vision.coolbench run --label parallel+fp16 $CLIPS > /tmp/fp16.json 2>> /var/log/ringclip/coolbench.log
-  /opt/ringclip/venv/bin/python -m vision.coolbench compare /tmp/serial.json /tmp/parallel.json >> /var/log/ringclip/coolbench.log
-  /opt/ringclip/venv/bin/python -m vision.coolbench compare /tmp/serial.json /tmp/fp16.json >> /var/log/ringclip/coolbench.log
-  cp /tmp/serial.json /tmp/parallel.json /tmp/fp16.json /var/log/ringclip/
+  $BENCH PIPELINE_PARALLEL=0 DETECTOR_ENGINE=new /opt/ringclip/venv/bin/python -m vision.coolbench run --label before $CLIPS > /tmp/before.json 2>> /var/log/ringclip/coolbench.log
+  $BENCH /opt/ringclip/venv/bin/python -m vision.coolbench run --label after $CLIPS > /tmp/after.json 2>> /var/log/ringclip/coolbench.log
+  /opt/ringclip/venv/bin/python -m vision.coolbench compare /tmp/before.json /tmp/after.json >> /var/log/ringclip/coolbench.log
+  cp /tmp/before.json /tmp/after.json /var/log/ringclip/
 } || echo "pipeline benchmark failed; the demo starts anyway" >> /var/log/ringclip/coolbench.log
 cd /opt/ringclip
 

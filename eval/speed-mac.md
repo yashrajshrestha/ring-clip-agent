@@ -1,4 +1,4 @@
-<!-- Apple M2 Pro laptop, 2026-10-24. The AWS Graviton run is measured at server boot and logged to CloudWatch (stream {instance}/coolbench). -->
+<!-- Apple M2 Pro laptop, 2026-10-24, before the classic dnn engine became the default (both runs below use the new engine; the classic engine adds 1.03x here and 2.65x on Graviton2, see eval/speed-graviton.md). -->
 
 Before these changes (commit 433706d) the same OpenCV pass over the 10 clips took 46.2 s (mean of 2 runs); the switch to OpenCV-native counting alone brings it to 42.1 s with identical events. The tables below start from there.
 
