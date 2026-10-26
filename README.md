@@ -1,7 +1,8 @@
 # ring-clip-agent
 
 **Live demo (LookTwice, AWS Graviton):** http://184.197.167.91/
-**Demo video (2:55):** https://youtu.be/ivwJz-WfAxc
+**Demo video, OpenCV AI Competition entry (3:36):** https://youtu.be/KZdM_F4J7U4
+**Demo video, Strands Decider entry (2:55):** https://youtu.be/ivwJz-WfAxc
 **Technical report (OpenCV AI Competition 2026):** [docs/opencv-report.md](docs/opencv-report.md)
 **Architecture:** [docs/architecture.md](docs/architecture.md)
 **Article (AWS Builder Center):** https://builder.aws.com/content/3L5C7j4wQFRqJz1IoDHIEEOZEp5/decide-cheap-look-twice-a-doorbell-agent-built-on-strands-decider-2b

@@ -6,7 +6,7 @@
 |---|---|
 | Live demo | http://184.197.167.91/ (AWS Graviton, us-east-1) |
 | Code | https://github.com/yashrajshrestha/ring-clip-agent (MIT) |
-| Video | https://youtu.be/ivwJz-WfAxc |
+| Video (3:36) | https://youtu.be/KZdM_F4J7U4 |
 | Architecture and agent workflow diagrams | [docs/architecture.md](architecture.md) |
 | Evaluation | [eval/benchmark.md](../eval/benchmark.md), [eval/report.md](../eval/report.md) |
 
